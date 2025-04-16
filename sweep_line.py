@@ -1,0 +1,138 @@
+from typing import List, Tuple
+import heapq
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return f"({self.x}, {self.y})"
+
+class Segment:
+    def __init__(self, p1: Point, p2: Point):
+        self.p1 = p1
+        self.p2 = p2
+
+    def __repr__(self):
+        return f"Segment({self.p1}, {self.p2})"
+
+    def __lt__(self, other):
+        # Compare segments by their left endpoint's x-coordinate
+        # print(f"Comparing {self} < {other}")
+        return self.p1.x < other.p1.x or (self.p1.x == other.p1.x and self.p1.y < other.p1.y)
+
+
+def find_intersections(segments: List[Segment]) -> List[Tuple[Point, Segment, Segment]]:
+    events = []
+    for seg in segments:
+        # Ensure p1 is the left endpoint
+        if seg.p1.x > seg.p2.x:
+            seg.p1, seg.p2 = seg.p2, seg.p1
+        events.append((seg.p1.x, 'left', seg))
+        events.append((seg.p2.x, 'right', seg))
+
+    # Sort events by x-coordinate
+    heapq.heapify(events)
+    copy_events = events.copy()
+    sorted_events = []
+    while copy_events:
+        sorted_events.append(heapq.heappop(copy_events))
+
+    status = []  # Active segments (sorted by y-coordinate at current sweep line)
+    intersections = []
+
+    while events:
+        x, event_type, seg = heapq.heappop(events)
+
+        if event_type == 'left':
+            # Add segment to status and check for intersections with neighbors
+            status.append(seg)
+            status.sort(key=lambda s: s.p1.y)  # Sort by y-coordinate
+            idx = status.index(seg)
+            if idx > 0:
+                # Check intersection with the segment above
+                above = status[idx - 1]
+                intersect = find_intersection(seg, above)
+                if intersect:
+                    intersections.append((intersect, seg, above))
+            if idx < len(status) - 1:
+                # Check intersection with the segment below
+                below = status[idx + 1]
+                intersect = find_intersection(seg, below)
+                if intersect:
+                    intersections.append((intersect, seg, below))
+        elif event_type == 'right':
+            # Remove segment from status and check for intersections between neighbors
+            idx = status.index(seg)
+            if idx > 0 and idx < len(status) - 1:
+                # Check intersection between the segments above and below
+                above = status[idx - 1]
+                below = status[idx + 1]
+                intersect = find_intersection(above, below)
+                if intersect:
+                    intersections.append((intersect, above, below))
+            status.remove(seg)
+
+    return intersections
+
+def find_intersection(seg1: Segment, seg2: Segment) -> Point:
+    # https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect
+    # https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+    # Calculate intersection point of two line segments (if any)
+    x1, y1 = seg1.p1.x, seg1.p1.y
+    x2, y2 = seg1.p2.x, seg1.p2.y
+    x3, y3 = seg2.p1.x, seg2.p1.y
+    x4, y4 = seg2.p2.x, seg2.p2.y
+
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if denom == 0:
+        return None  # Parallel or coincident lines as their slopes are equal
+
+    # A line segment can be represented parametrically using two points
+    # x = x1 + t(x2 - x1), y = y1 + t(y2-y1)
+    # Finding Intersection
+    # To find the intersection of two line segments, we solve for t and u such that:
+    # x1+t(x2−x1)=x3+u(x4−x3)
+    # y1+t(y2−y1)=y3+u(y4−y3)
+    # This is playground system of two equations with two unknowns (t and u). Solving this system gives us the values of t and u.
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if denom == 0:
+        return None  # parallel lines
+
+    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+    u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom
+
+    if 0 <= t <= 1 and 0 <= u <= 1:
+        # intersection point
+        px = x1 + t * (x2 - x1)
+        py = y1 + t * (y2 - y1)
+        return (px, py)
+
+    return None  # no intersection
+    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+    u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
+
+    if 0 <= t <= 1 and 0 <= u <= 1:
+        # Intersection point lies within both segments
+        x = x1 + t * (x2 - x1)
+        y = y1 + t * (y2 - y1)
+        return Point(x, y)
+    return None
+
+# Example usage
+# segments = [
+#     Segment(Point(1, 1), Point(4, 4)),
+#     Segment(Point(1, 4), Point(4, 1)),
+#     Segment(Point(2, 2), Point(5, 2))
+# ]
+
+segments = [
+    Segment(Point(1, 3), Point(5, 1)),
+    Segment(Point(2, 2), Point(4, 4)),
+    Segment(Point(3, 0), Point(6, 3))
+]
+
+intersections = find_intersections(segments)
+for intersect, seg1, seg2 in intersections:
+    print(f"Intersection at {intersect} between {seg1} and {seg2}")
