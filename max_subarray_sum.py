@@ -54,3 +54,13 @@ def kadanes_algorithm_with_indices(arr):
             end = i
 
     return (start, end, max_global)
+
+
+def max_subarray_sum(arr):
+    res = arr[0]
+    total = 0
+
+    for num in arr:
+        total = total + num
+        res = max(res, total)
+        total = max(total, 0)
