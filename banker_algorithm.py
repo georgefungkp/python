@@ -50,4 +50,4 @@ if __name__ == "__main__":
         print(" P", ans[i], " ->", sep="", end="")
     print(" P", ans[n - 1], sep="")
 
-# This code is contributed by SHUBHAMSINGH10
+
