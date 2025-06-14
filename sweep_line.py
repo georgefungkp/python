@@ -1,134 +1,182 @@
+# Sweep Line Algorithm Implementation for Finding Line Segment Intersections
+# This module implements the sweep line algorithm, which is an efficient technique
+# for finding intersections among a set of line segments in a plane.
+# Time Complexity: O(n log n) where n is the number of line segments
+# Space Complexity: O(n)
+
 from typing import List, Tuple
 import heapq
 
 class Point:
+    """Represents a 2D point with x and y coordinates."""
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
+        self.x = x  # x-coordinate
+        self.y = y  # y-coordinate
 
     def __repr__(self):
+        """String representation of the point."""
         return f"({self.x}, {self.y})"
 
 class Segment:
+    """Represents a line segment defined by two endpoints."""
     def __init__(self, p1: Point, p2: Point):
-        self.p1 = p1
-        self.p2 = p2
+        self.p1 = p1  # First endpoint
+        self.p2 = p2  # Second endpoint
 
     def __repr__(self):
+        """String representation of the segment."""
         return f"Segment({self.p1}, {self.p2})"
 
     def __lt__(self, other):
-        # Compare segments by their left endpoint's x-coordinate
-        # print(f"Comparing {self} < {other}")
+        """Comparison operator for sorting segments.
+
+        Segments are compared by their left endpoints' x-coordinates,
+        with y-coordinate as a tiebreaker.
+        """
         return self.p1.x < other.p1.x or (self.p1.x == other.p1.x and self.p1.y < other.p1.y)
 
 
 def find_intersections(segments: List[Segment]) -> List[Tuple[Point, Segment, Segment]]:
+    """Find all intersections between line segments using the sweep line algorithm.
+
+    The sweep line algorithm works by:
+    1. Creating events for each segment's endpoints (left and right)
+    2. Processing events from left to right
+    3. Maintaining a status structure of active segments at the current sweep line position
+    4. Checking for intersections between adjacent segments in the status structure
+
+    Args:
+        segments: List of line segments to check for intersections
+
+    Returns:
+        List of tuples, each containing an intersection point and the two segments that intersect
+    """
+    # Create events for each segment's endpoints
     events = []
     for seg in segments:
-        # Ensure p1 is the left endpoint
+        # Ensure p1 is the left endpoint (has smaller x-coordinate)
         if seg.p1.x > seg.p2.x:
             seg.p1, seg.p2 = seg.p2, seg.p1
-        events.append((seg.p1.x, 'left', seg))
-        events.append((seg.p2.x, 'right', seg))
+        # Add left and right endpoint events to the queue
+        events.append((seg.p1.x, 'left', seg))   # Left endpoint event
+        events.append((seg.p2.x, 'right', seg))  # Right endpoint event
 
-    # Sort events by x-coordinate
-    heapq.heapify(events)
+    # Use a priority queue to sort events by x-coordinate
+    heapq.heapify(events)  # Convert events list to a min-heap
+
+    # Create a sorted copy of events (for debugging/visualization purposes)
     copy_events = events.copy()
     sorted_events = []
     while copy_events:
         sorted_events.append(heapq.heappop(copy_events))
 
-    status = []  # Active segments (sorted by y-coordinate at current sweep line)
+    # Status line - stores active segments intersecting the current sweep line
+    # Segments in status are sorted by their y-coordinate at the sweep line
+    status = []  
+
+    # List to store all found intersections
     intersections = []
 
+    # Process events from left to right (increasing x-coordinate)
     while events:
+        # Get the next event (leftmost x-coordinate)
         x, event_type, seg = heapq.heappop(events)
 
         if event_type == 'left':
-            # Add segment to status and check for intersections with neighbors
+            # Left endpoint event: segment enters the sweep line
+
+            # Add segment to status
             status.append(seg)
-            status.sort(key=lambda s: s.p1.y)  # Sort by y-coordinate
+            # Sort status by y-coordinate at the current sweep line position
+            status.sort(key=lambda s: s.p1.y)  
+
+            # Find the position of the new segment in the sorted status
             idx = status.index(seg)
+
+            # Check for intersection with the segment above (if exists)
             if idx > 0:
-                # Check intersection with the segment above
                 above = status[idx - 1]
                 intersect = find_intersection(seg, above)
                 if intersect:
                     intersections.append((intersect, seg, above))
+
+            # Check for intersection with the segment below (if exists)
             if idx < len(status) - 1:
-                # Check intersection with the segment below
                 below = status[idx + 1]
                 intersect = find_intersection(seg, below)
                 if intersect:
                     intersections.append((intersect, seg, below))
+
         elif event_type == 'right':
-            # Remove segment from status and check for intersections between neighbors
+            # Right endpoint event: segment leaves the sweep line
+
+            # Find the position of the segment in the status
             idx = status.index(seg)
+
+            # When removing a segment, check if its neighbors might intersect
             if idx > 0 and idx < len(status) - 1:
-                # Check intersection between the segments above and below
+                # Get segments above and below the one being removed
                 above = status[idx - 1]
                 below = status[idx + 1]
+
+                # Check if these two segments intersect
                 intersect = find_intersection(above, below)
                 if intersect:
                     intersections.append((intersect, above, below))
+
+            # Remove the segment from status
             status.remove(seg)
 
     return intersections
 
-def find_intersection(seg1: Segment, seg2: Segment) -> Point:
-    # https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect
-    # https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
-    # Calculate intersection point of two line segments (if any)
-    x1, y1 = seg1.p1.x, seg1.p1.y
-    x2, y2 = seg1.p2.x, seg1.p2.y
-    x3, y3 = seg2.p1.x, seg2.p1.y
-    x4, y4 = seg2.p2.x, seg2.p2.y
 
+def find_intersection(seg1: Segment, seg2: Segment) -> Point:
+    """Calculate the intersection point of two line segments if they intersect.
+
+    This function uses the parametric form of line equations to find the intersection.
+    References:
+    - https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect
+    - https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+
+    Args:
+        seg1: First line segment
+        seg2: Second line segment
+
+    Returns:
+        The intersection point if segments intersect, None otherwise
+    """
+    # Extract coordinates of the endpoints
+    x1, y1 = seg1.p1.x, seg1.p1.y  # First endpoint of segment 1
+    x2, y2 = seg1.p2.x, seg1.p2.y  # Second endpoint of segment 1
+    x3, y3 = seg2.p1.x, seg2.p1.y  # First endpoint of segment 2
+    x4, y4 = seg2.p2.x, seg2.p2.y  # Second endpoint of segment 2
+
+    # Calculate the denominator of the equations
+    # If denominator is 0, lines are parallel or collinear
     denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
     if denom == 0:
         return None  # Parallel or coincident lines as their slopes are equal
 
-    # A line segment can be represented parametrically using two points
-    # x = x1 + t(x2 - x1), y = y1 + t(y2-y1)
-    # Finding Intersection
-    # To find the intersection of two line segments, we solve for t and u such that:
-    # x1+t(x2−x1)=x3+u(x4−x3)
-    # y1+t(y2−y1)=y3+u(y4−y3)
-    # This is playground system of two equations with two unknowns (t and u). Solving this system gives us the values of t and u.
-    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-    if denom == 0:
-        return None  # parallel lines
-
+    # Calculate parameters t and u
+    # A line segment can be represented parametrically as:
+    # Point on segment 1: (x,y) = (x1,y1) + t*(x2-x1,y2-y1) where 0 ≤ t ≤ 1
+    # Point on segment 2: (x,y) = (x3,y3) + u*(x4-x3,y4-y3) where 0 ≤ u ≤ 1
+    # At intersection point, these two equations are equal, forming a system:
+    # x1 + t(x2-x1) = x3 + u(x4-x3)
+    # y1 + t(y2-y1) = y3 + u(y4-y3)
     t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
     u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom
 
+    # If both t and u are between 0 and 1, segments intersect
     if 0 <= t <= 1 and 0 <= u <= 1:
-        # intersection point
+        # Calculate the intersection point using parameter t
         px = x1 + t * (x2 - x1)
         py = y1 + t * (y2 - y1)
-        return (px, py)
+        return Point(px, py)
 
-    return None  # no intersection
-    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
-    u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
-
-    if 0 <= t <= 1 and 0 <= u <= 1:
-        # Intersection point lies within both segments
-        x = x1 + t * (x2 - x1)
-        y = y1 + t * (y2 - y1)
-        return Point(x, y)
+    # If t or u is outside [0,1], segments don't intersect
     return None
 
-# Example usage
-# segments = [
-#     Segment(Point(1, 1), Point(4, 4)),
-#     Segment(Point(1, 4), Point(4, 1)),
-#     Segment(Point(2, 2), Point(5, 2))
-# ]
-# Sweep Line Algorithm Implementation
-# The sweep line algorithm is a technique used in computational geometry
-# to efficiently solve various geometric problems by sweeping a line across the plane
 
 def find_line_intersections(lines):
     """
@@ -247,12 +295,14 @@ if __name__ == "__main__":
     print("\nIntersections:")
     for i, point in enumerate(intersections):
         print(f"Intersection {i}: ({point[0]:.2f}, {point[1]:.2f})")
-segments = [
-    Segment(Point(1, 3), Point(5, 1)),
-    Segment(Point(2, 2), Point(4, 4)),
-    Segment(Point(3, 0), Point(6, 3))
-]
 
-intersections = find_intersections(segments)
-for intersect, seg1, seg2 in intersections:
-    print(f"Intersection at {intersect} between {seg1} and {seg2}")
+    # Test with Point and Segment classes
+    segments = [
+        Segment(Point(1, 3), Point(5, 1)),
+        Segment(Point(2, 2), Point(4, 4)),
+        Segment(Point(3, 0), Point(6, 3))
+    ]
+
+    intersections = find_intersections(segments)
+    for intersect, seg1, seg2 in intersections:
+        print(f"Intersection at {intersect} between {seg1} and {seg2}")

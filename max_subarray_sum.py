@@ -3,10 +3,10 @@ def kadanes_algorithm(arr):
     Finds the maximum contiguous subarray sum using Kadane's Algorithm
 
     Args:
-    arr (list): List of numbers
+        arr (list): List of numbers
 
     Returns:
-    int: Maximum subarray sum
+        int: Maximum subarray sum
     """
     if not arr:
         return 0
@@ -26,12 +26,36 @@ def kadanes_algorithm(arr):
 
 def kadanes_algorithm_with_indices(arr):
     """
-    Finds maximum subarray sum and its indices using Kadane's Algorithm
+    Finds the maximum contiguous subarray sum using Kadane's Algorithm
+    and returns the indices of the subarray.
 
     Args:
-    arr (list): List of numbers
-# Maximum Subarray Sum Algorithms
-# This file implements different approaches to find the maximum subarray sum
+        arr (list): List of numbers
+
+    Returns:
+        tuple: (start_index, end_index, max_sum)
+    """
+    if not arr:
+        return (0, 0, 0)
+
+    max_current = max_global = arr[0]
+    start = end = 0
+    temp_start = 0
+
+    for i in range(1, len(arr)):
+        if arr[i] > max_current + arr[i]:
+            max_current = arr[i]
+            temp_start = i
+        else:
+            max_current += arr[i]
+
+        if max_current > max_global:
+            max_global = max_current
+            start = temp_start
+            end = i
+
+    return (start, end, max_global)
+
 
 def max_subarray_sum_brute_force(arr):
     """
@@ -142,6 +166,27 @@ def max_subarray_sum_kadane(arr):
     return max_so_far, start, end
 
 
+def max_subarray_sum(arr):
+    """
+    Simple version of Kadane's algorithm for maximum subarray sum.
+
+    Args:
+        arr (list): List of numbers
+
+    Returns:
+        int: Maximum subarray sum
+    """
+    res = arr[0]
+    total = 0
+
+    for num in arr:
+        total = total + num
+        res = max(res, total)
+        total = max(total, 0)
+
+    return res
+
+
 # Test all algorithms
 if __name__ == "__main__":
     test_arrays = [
@@ -162,39 +207,6 @@ if __name__ == "__main__":
         max_sum, start, end = max_subarray_sum_better(arr)
         print(f"Better Brute Force: Max Sum = {max_sum}, Subarray = {arr[start:end+1]}")
 
-        # Uncomment for regular brute force (least efficient)
-        # max_sum, start, end = max_subarray_sum_brute_force(arr)
-        # print(f"Brute Force: Max Sum = {max_sum}, Subarray = {arr[start:end+1]}")
-    Returns:
-    tuple: (start_index, end_index, max_sum)
-    """
-    if not arr:
-        return (0, 0, 0)
-
-    max_current = max_global = arr[0]
-    start = end = 0
-    temp_start = 0
-
-    for i in range(1, len(arr)):
-        if arr[i] > max_current + arr[i]:
-            max_current = arr[i]
-            temp_start = i
-        else:
-            max_current += arr[i]
-
-        if max_current > max_global:
-            max_global = max_current
-            start = temp_start
-            end = i
-
-    return (start, end, max_global)
-
-
-def max_subarray_sum(arr):
-    res = arr[0]
-    total = 0
-
-    for num in arr:
-        total = total + num
-        res = max(res, total)
-        total = max(total, 0)
+        # Using simple Kadane's algorithm
+        simple_max = max_subarray_sum(arr)
+        print(f"Simple Kadane's: Max Sum = {simple_max}")
