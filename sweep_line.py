@@ -126,7 +126,127 @@ def find_intersection(seg1: Segment, seg2: Segment) -> Point:
 #     Segment(Point(1, 4), Point(4, 1)),
 #     Segment(Point(2, 2), Point(5, 2))
 # ]
+# Sweep Line Algorithm Implementation
+# The sweep line algorithm is a technique used in computational geometry
+# to efficiently solve various geometric problems by sweeping a line across the plane
 
+def find_line_intersections(lines):
+    """
+    Find all intersections between a set of line segments using the sweep line algorithm.
+
+    Time Complexity: O(n log n) where n is the number of line segments
+    Space Complexity: O(n)
+
+    Parameters:
+        lines (list): List of line segments, each represented as [(x1,y1), (x2,y2)]
+
+    Returns:
+        list: List of intersection points (x,y)
+    """
+    # Event class to represent points of interest (line segment endpoints)
+    class Event:
+        def __init__(self, x, y, is_start, line_idx):
+            self.x = x  # x-coordinate
+            self.y = y  # y-coordinate
+            self.is_start = is_start  # True if this is the start point of a line segment
+            self.line_idx = line_idx  # Index of the line segment this event belongs to
+
+        def __lt__(self, other):
+            # Sort by x-coordinate first, then by whether it's a start or end point
+            if self.x != other.x:
+                return self.x < other.x
+            # For same x-coordinate, end points come before start points
+            return not self.is_start and other.is_start
+
+    # Helper function to check if two line segments intersect
+    def do_lines_intersect(line1, line2):
+        # Line 1 coordinates
+        x1, y1 = line1[0]
+        x2, y2 = line1[1]
+        # Line 2 coordinates
+        x3, y3 = line2[0]
+        x4, y4 = line2[1]
+
+        # Calculate determinants
+        det1 = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3)
+
+        # If determinant is zero, lines are parallel or collinear
+        if det1 == 0:
+            return None
+
+        # Calculate intersection point parameters
+        t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / det1
+        u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / det1
+
+        # Check if intersection is within both line segments
+        if 0 <= t <= 1 and 0 <= u <= 1:
+            # Calculate intersection point
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+            return (x, y)
+
+        return None
+
+    # Create events for all line segment endpoints
+    events = []
+    for i, line in enumerate(lines):
+        # Ensure the line segment is ordered by x-coordinate
+        (x1, y1), (x2, y2) = line
+        if x1 > x2 or (x1 == x2 and y1 > y2):
+            (x1, y1), (x2, y2) = (x2, y2), (x1, y1)
+
+        # Add start and end events
+        events.append(Event(x1, y1, True, i))
+        events.append(Event(x2, y2, False, i))
+
+    # Sort events by x-coordinate
+    events.sort()
+
+    # Set to keep track of active line segments
+    active_lines = set()
+
+    # List to store intersection points
+    intersections = []
+
+    # Process events from left to right
+    for event in events:
+        if event.is_start:
+            # For each active line, check for intersection with current line
+            for line_idx in active_lines:
+                intersection = do_lines_intersect(
+                    lines[event.line_idx], lines[line_idx])
+                if intersection:
+                    intersections.append(intersection)
+
+            # Add current line to active set
+            active_lines.add(event.line_idx)
+        else:
+            # Remove line from active set
+            active_lines.remove(event.line_idx)
+
+    return intersections
+
+
+# Test the algorithm
+if __name__ == "__main__":
+    # Define some test line segments
+    lines = [
+        [(0, 0), (10, 10)],    # Line from (0,0) to (10,10)
+        [(0, 10), (10, 0)],     # Line from (0,10) to (10,0)
+        [(5, 0), (5, 10)],      # Vertical line at x=5
+        [(0, 5), (10, 5)]       # Horizontal line at y=5
+    ]
+
+    # Find all intersections
+    intersections = find_line_intersections(lines)
+
+    print("Line segments:")
+    for i, line in enumerate(lines):
+        print(f"Line {i}: {line}")
+
+    print("\nIntersections:")
+    for i, point in enumerate(intersections):
+        print(f"Intersection {i}: ({point[0]:.2f}, {point[1]:.2f})")
 segments = [
     Segment(Point(1, 3), Point(5, 1)),
     Segment(Point(2, 2), Point(4, 4)),
