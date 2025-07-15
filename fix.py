@@ -3,6 +3,17 @@ tags = {
     14: "CumQty (Total quantity filled)",
     31: "LastPx (Last traded price)",
     32: "LastQty (Last traded quantity)",
+    35: {"name": "MsgType (Message Type)",
+         "values": {
+             "3": "Reject",
+             "8": "Execution Report",
+             "E": "New Order Single",
+             "F": "Order Cancel Request",
+             "H": "Order Status Request",
+             "I": "New Order List",
+             "K": "Order Status Request",
+         }
+    },
     38: "OrderQty (Quantity ordered)",
     39: {
         "name": "OrdStatus (Order status)",
@@ -71,6 +82,8 @@ def quiz():
         answer = input(f"Tag {tag_id} is for what? ")
         correct_answer = tag_data.split()[0]
         print(f"Correct!" if answer.lower() == correct_answer.lower() else f"Nope! It's {correct_answer}")
+        # correct_answer = tag_data
+        # print(f"Correct!" if int(answer) == int(correct_answer) else f"Nope! It's {correct_answer}")
 
 
 # Run the quiz
