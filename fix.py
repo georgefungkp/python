@@ -7,11 +7,10 @@ tags = {
          "values": {
              "3": "Reject",
              "8": "Execution Report",
-             "E": "New Order Single",
+             "D": "New Order Single",
+             "E": "New Order - List",
              "F": "Order Cancel Request",
              "H": "Order Status Request",
-             "I": "New Order List",
-             "K": "Order Status Request",
          }
     },
     38: "OrderQty (Quantity ordered)",
@@ -48,8 +47,10 @@ tags = {
         "name": "ExecType (Execution type)",
         "values": {
             "0": "New",
+            "1": "Partial Fill",
+            "2": "Filled",
             "4": "Canceled",
-            "F": "Trade"
+            "8": "Rejected",
             # Add other exec types as needed
         }
     },

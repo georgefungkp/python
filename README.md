@@ -1,101 +1,230 @@
 # Algorithm Implementations in Python
 
-This repository contains implementations of classic algorithms and data structures in Python. Each implementation includes detailed comments, visualizations, and examples of usage.
+This repository contains implementations of classic algorithms and data structures in Python. Each implementation includes detailed comments, examples, and educational content to help understand fundamental computer science concepts.
 
-## Implemented Algorithms
+## Data Structures
 
-### 1. Traveling Salesman Problem (TSP) - Dynamic Programming
-
-**File:** `TSP_DP.py`
-
-An implementation of the Traveling Salesman Problem using dynamic programming approach. The TSP involves finding the shortest possible route that visits each city exactly once and returns to the origin city.
-
-**Features:**
-- O(n²·2ⁿ) time complexity solution using bit manipulation
-- Random test case generation
-- Path visualization with matplotlib
-- Performance measurement
-
-**Usage:**
-```bash
-python TSP_DP.py [number_of_cities]
-```
-
-### 2. Max Heap
-
+### 1. Max Heap
 **File:** `max_heap.py`
 
-An implementation of the Max Heap data structure, where the value of each node is greater than or equal to the values of its children.
+A complete implementation of the Max Heap data structure where parent nodes are greater than or equal to their children.
 
 **Features:**
-- Standard heap operations: insert, extract_max, peek
-- Heap visualization using matplotlib
-- Heap sort implementation
+- Standard heap operations: insert, extract_max, get_max
+- Heap visualization capabilities
+- Priority queue implementation using heaps
+- Heap sort demonstration
+- Educational examples with detailed comments
 
-**Usage:**
-```bash
-python max_heap.py
-```
+### 2. Disjoint Set Union (DSU)
+**File:** `DSU.py`
 
-### 3. Dijkstra's Shortest Path Algorithm
+Implementation of the Union-Find data structure with path compression and union by rank optimizations.
 
+**Features:**
+- Efficient union and find operations
+- Path compression for optimal performance
+- Union by rank heuristic
+- Applications in graph connectivity problems
+
+### 3. Monotonic Stack
+**File:** `monotonic_stack.py`
+
+Implementation and applications of monotonic stack data structure for solving various algorithmic problems.
+
+**Features:**
+- Stack maintaining monotonic property
+- Solutions to common problems like next greater element
+- Time-efficient approaches to array processing problems
+
+## Graph Algorithms
+
+### 1. Breadth-First Search (BFS) and Depth-First Search (DFS)
+**File:** `BFS_DFS.py`
+
+Comprehensive implementations of fundamental graph traversal algorithms.
+
+**Features:**
+- BFS using queue (FIFO) for level-order traversal
+- DFS using both iterative (stack) and recursive approaches
+- Detailed comments explaining time/space complexity
+- Applications in pathfinding and graph analysis
+
+### 2. Dijkstra's Shortest Path Algorithm
 **File:** `dijkstra.py`
 
-An implementation of Dijkstra's algorithm for finding the shortest paths from a source vertex to all other vertices in a weighted graph.
+Implementation of Dijkstra's algorithm for finding shortest paths in weighted graphs.
 
 **Features:**
-- Works with both directed and undirected graphs
-- Efficient implementation using priority queue
-- Path reconstruction
+- Priority queue-based implementation
+- Handles both directed and undirected graphs
+- Path reconstruction capabilities
 - Graph visualization with shortest path highlighting
 
-**Usage:**
-```bash
-python dijkstra.py
-```
+### 3. Cycle Detection
+**File:** `unidirection_cycle_detection.py`
 
-### 4. 0/1 Knapsack Problem
+Algorithm for detecting cycles in directed graphs using DFS-based approaches.
 
+**Features:**
+- Efficient cycle detection in directed graphs
+- Applications in dependency resolution and deadlock detection
+
+## Dynamic Programming
+
+### 1. 0/1 Knapsack Problem
 **File:** `knapsack.py`
 
-An implementation of the 0/1 Knapsack Problem using dynamic programming. The problem involves selecting items with different weights and values to maximize total value while keeping the total weight under a given capacity.
+Classic dynamic programming solution to the 0/1 Knapsack optimization problem.
 
 **Features:**
 - Bottom-up dynamic programming approach
-- Recursive implementation with memoization for comparison
-- Solution visualization
-- Random problem generation
+- Space-optimized versions
+- Solution reconstruction
+- Random test case generation
 
-**Usage:**
-```bash
-python knapsack.py
-```
-
-### 5. Longest Common Subsequence (LCS)
-
+### 2. Longest Common Subsequence (LCS)
 **File:** `lcs.py`
 
-An implementation of the Longest Common Subsequence algorithm using dynamic programming. LCS finds the longest subsequence common to two sequences.
+Dynamic programming solution for finding the longest common subsequence between two sequences.
+
+**Features:**
+- DP table construction and visualization
+- Subsequence reconstruction
+- Applications in text comparison and version control
+
+### 3. Edit Distance
+**File:** `edit_distance.py`
+
+Implementation of the Wagner-Fischer algorithm for computing edit distance (Levenshtein distance).
 
 **Features:**
 - Dynamic programming solution
-- Subsequence reconstruction
-- Visualization of the DP table
+- String transformation operations
+- Applications in spell checking and DNA sequence analysis
 
-**Usage:**
-```bash
-python lcs.py
-```
+### 4. Maximum Subarray Sum
+**Files:** `max_subarray_sum.py`, `maximum_subarray.py`
+
+Multiple approaches to solving the maximum subarray problem.
+
+**Features:**
+- Kadane's algorithm implementation
+- Brute force and optimized solutions
+- Handling of edge cases
+
+## String Algorithms
+
+### 1. Smallest Non-Repeating Character
+**File:** `smallest-non-repeating.py`
+
+Algorithms for finding non-repeating characters and substrings.
+
+**Features:**
+- First non-repeating character finder
+- Minimum length non-repeating subarray
+- Optimized single-pass solutions
+- Sliding window technique applications
+
+### 2. Substring Operations
+**File:** `substring.py`
+
+Various string processing and substring manipulation algorithms.
+
+**Features:**
+- Pattern matching algorithms
+- String processing utilities
+- Efficient substring operations
+
+## Mathematical Algorithms
+
+### 1. Fibonacci Sequence
+**File:** `fibonacci.py`
+
+Multiple implementations of Fibonacci number generation.
+
+**Features:**
+- Recursive, iterative, and matrix-based approaches
+- Performance comparisons
+- Mathematical properties exploration
+
+### 2. Prime Factorization
+**File:** `get_factors.py`
+
+Algorithm for finding prime factors of integers.
+
+**Features:**
+- Efficient factorization methods
+- Prime number utilities
+- Mathematical applications
+
+## Sorting Algorithms
+
+### 1. Sorting Implementations
+**File:** `sorting.py`
+
+Collection of classic sorting algorithms with educational focus.
+
+**Features:**
+- Multiple sorting algorithm implementations
+- Performance comparisons
+- Best, average, and worst-case analysis
+
+## Search Algorithms
+
+### 1. Binary Search Examples
+**File:** `binary_search_examples.py`
+
+Comprehensive examples of binary search applications.
+
+**Features:**
+- Classic binary search implementation
+- Variations and edge cases
+- Applications in different problem domains
+
+## Advanced Algorithms
+
+### 1. Sweep Line Algorithm
+**File:** `sweep_line.py`
+
+Implementation of the sweep line technique for geometric problems.
+
+**Features:**
+- Line segment intersection detection
+- Event-driven algorithm design
+- Computational geometry applications
+
+### 2. Banker's Algorithm
+**File:** `banker_algorithm.py`
+
+Implementation of the Banker's algorithm for deadlock avoidance in operating systems.
+
+**Features:**
+- Resource allocation and deadlock prevention
+- Safety algorithm implementation
+- Operating systems concepts demonstration
+
+## Utilities and Examples
+
+### 1. CSV Processing
+**File:** `csv_read.py`
+
+Utilities for reading and processing CSV data files.
+
+### 2. Test Files
+**File:** `test.py`
+
+Test cases and examples for various algorithms.
+
+### 3. Sample Data
+**File:** `data.csv`
+
+Sample dataset for testing data processing algorithms.
 
 ## Requirements
 
-The implementations use the following Python packages:
-- numpy
-- matplotlib
-- pillow (for some visualizations)
+The implementations use standard Python libraries and some additional packages:
 
-You can install the required packages using:
 ```bash
-pip install numpy matplotlib pillow
+pip install numpy matplotlib
 ```
-
