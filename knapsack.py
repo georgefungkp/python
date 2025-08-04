@@ -1,6 +1,3 @@
-# Knapsack Problem implementation using Dynamic Programming
-# The knapsack problem is a problem in combinatorial optimization where we need to
-# maximize the value of items in a knapsack without exceeding the weight capacity
 #!/usr/bin/env python3
 
 """
@@ -17,7 +14,7 @@ import time
 import random
 
 
-def knapsack_dp(values, weights, capacity):
+def knapsack_dp(values, weights, capacity, return_items=False):
     """
     Solve the 0/1 knapsack problem using dynamic programming.
 
@@ -25,9 +22,19 @@ def knapsack_dp(values, weights, capacity):
         values: List of values for each item
         weights: List of weights for each item
         capacity: Maximum weight capacity of the knapsack
+        return_items: If True, returns selected items; if False, returns only max value
 
     Returns:
-        Tuple of (maximum value, selected items)
+        int or tuple: Maximum value, or (maximum value, selected items) if return_items=True
+
+    Example:
+        >>> weights = [2, 3, 4, 5]
+        >>> values = [3, 4, 5, 6]
+        >>> capacity = 8
+        >>> knapsack_dp(values, weights, capacity)
+        10
+        >>> knapsack_dp(values, weights, capacity, return_items=True)
+        (10, [1, 3])  # Best combination: items 1 and 3 (weights 3+5=8, values 4+6=10)
     """
     n = len(values)
 
@@ -46,6 +53,11 @@ def knapsack_dp(values, weights, capacity):
                 # Max of (excluding current item, including current item)
                 dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1])
 
+    max_value = dp[n][capacity]
+
+    if not return_items:
+        return max_value
+
     # Reconstruct the solution (which items are selected)
     selected_items = []
     w = capacity
@@ -58,10 +70,10 @@ def knapsack_dp(values, weights, capacity):
     # Reverse to get items in original order
     selected_items.reverse()
 
-    return dp[n][capacity], selected_items
+    return max_value, selected_items
 
 
-def knapsack_recursive(values, weights, capacity, n, memo=None):
+def knapsack_recursive(values, weights, capacity, n=None, memo=None):
     """
     Solve the 0/1 knapsack problem using recursive approach with memoization.
 
@@ -69,12 +81,15 @@ def knapsack_recursive(values, weights, capacity, n, memo=None):
         values: List of values for each item
         weights: List of weights for each item
         capacity: Maximum weight capacity of the knapsack
-        n: Number of items to consider
+        n: Number of items to consider (defaults to len(values))
         memo: Memoization dictionary
 
     Returns:
         Maximum value that can be obtained
     """
+    if n is None:
+        n = len(values)
+
     # Initialize memoization dictionary
     if memo is None:
         memo = {}
@@ -129,8 +144,8 @@ def visualize_knapsack_solution(values, weights, capacity, selected):
 
     # Add item labels
     for i, (x, y) in enumerate(zip(all_x, all_y)):
-        ax1.annotate(f"{i}\n(w={weights[i]}, v={values[i]})", 
-                    (x, y), ha='center', va='center', fontsize=8)
+        ax1.annotate(f"{i}\n(w={weights[i]}, v={values[i]})",
+                     (x, y), ha='center', va='center', fontsize=8)
 
     ax1.set_title("All Available Items")
     ax1.set_xlabel("X (arbitrary position)")
@@ -146,8 +161,8 @@ def visualize_knapsack_solution(values, weights, capacity, selected):
     selected_colors = [colors[i] for i in selected]
 
     # Draw knapsack as a rectangle
-    knapsack = plt.Rectangle((0.1, 0.1), 0.8, 0.8, fill=False, edgecolor='black', 
-                            linestyle='--', linewidth=2)
+    knapsack = plt.Rectangle((0.1, 0.1), 0.8, 0.8, fill=False, edgecolor='black',
+                             linestyle='--', linewidth=2)
     ax2.add_patch(knapsack)
 
     # Plot selected items
@@ -155,8 +170,8 @@ def visualize_knapsack_solution(values, weights, capacity, selected):
 
     # Add item labels for selected items
     for i, idx in enumerate(selected):
-        ax2.annotate(f"{idx}\n(w={weights[idx]}, v={values[idx]})", 
-                    (selected_x[i], selected_y[i]), ha='center', va='center', fontsize=8)
+        ax2.annotate(f"{idx}\n(w={weights[idx]}, v={values[idx]})",
+                     (selected_x[i], selected_y[i]), ha='center', va='center', fontsize=8)
 
     # Add summary
     total_weight = sum(weights[i] for i in selected)
@@ -195,163 +210,90 @@ def generate_random_items(n, max_weight=100, max_value=100, seed=None):
     return values, weights
 
 
-def main():
-    # Parameters
-    n_items = 15
-    knapsack_capacity = 100
+def compare_algorithms(values, weights, capacity):
+    """
+    Compare different knapsack algorithms and their performance.
 
-    # Generate random items
-    values, weights = generate_random_items(n_items, seed=42)
+    Args:
+        values: List of values for each item
+        weights: List of weights for each item
+        capacity: Maximum weight capacity
 
-    print("Knapsack Problem Example:")
-    print(f"Number of items: {n_items}")
-    print(f"Capacity: {knapsack_capacity}")
+    Returns:
+        Dict with algorithm results and timing information
+    """
+    results = {}
 
-    print("\nItem details:")
-    for i in range(n_items):
-        print(f"Item {i}: Weight = {weights[i]}, Value = {values[i]}")
-
-    # Solve using dynamic programming approach
-    print("\nSolving using Dynamic Programming...")
+    # Test dynamic programming approach
     start_time = time.time()
-    max_value, selected_items = knapsack_dp(values, weights, knapsack_capacity)
+    dp_value, dp_items = knapsack_dp(values, weights, capacity, return_items=True)
     dp_time = time.time() - start_time
 
-    print(f"Maximum value: {max_value}")
-    print(f"Selected items: {selected_items}")
-    print(f"Total weight: {sum(weights[i] for i in selected_items)}")
-    print(f"Computation time: {dp_time:.6f} seconds")
+    results['dp'] = {
+        'value': dp_value,
+        'items': dp_items,
+        'time': dp_time
+    }
 
-    # Solve using recursive approach with memoization
-    print("\nSolving using Recursive approach with memoization...")
+    # Test recursive approach
     start_time = time.time()
-    max_value_recursive = knapsack_recursive(values, weights, knapsack_capacity, n_items)
+    recursive_value = knapsack_recursive(values, weights, capacity)
     recursive_time = time.time() - start_time
 
-    print(f"Maximum value: {max_value_recursive}")
-    print(f"Computation time: {recursive_time:.6f} seconds")
+    results['recursive'] = {
+        'value': recursive_value,
+        'time': recursive_time
+    }
 
-    # Visualize the solution
-    print("\nVisualizing the solution...")
-    visualize_knapsack_solution(values, weights, knapsack_capacity, selected_items)
-
-
-if __name__ == "__main__":
-    main()
-def knapsack_01(weights, values, capacity):
-    """
-    Solves the 0/1 Knapsack Problem using Dynamic Programming.
-
-    This function finds the maximum value that can be obtained by selecting a subset of items
-    where each item can be chosen only once (0 or 1 times), such that the total weight
-    does not exceed the knapsack capacity.
-
-    Args:
-        weights (List[int]): List of weights for each item
-        values (List[int]): List of values for each item
-        capacity (int): Maximum weight capacity of the knapsack
-
-    Returns:
-        int: Maximum value that can be obtained
-
-    Example:
-        >>> weights = [2, 3, 4, 5]
-        >>> values = [3, 4, 5, 6]
-        >>> capacity = 8
-        >>> knapsack_01(weights, values, capacity)
-        10  # Best combination: items 0 and 2 (weights 2+4=6, values 3+5=8)
-    """
-    n = len(weights)  # Number of items
-
-    # Initialize DP table (n+1 rows, capacity+1 columns)
-    # dp[i][w] represents the maximum value that can be obtained using the first i items
-    # and with a maximum weight of w
-    dp = [[0 for _ in range(capacity + 1)] for _ in range(n + 1)]
-
-    # Fill the DP table bottom-up
-    for i in range(1, n + 1):
-        for w in range(capacity + 1):
-            # If current item's weight is less than or equal to the capacity w,
-            # we have two choices: take it or leave it
-            if weights[i-1] <= w:
-                # Maximum of: (value of current item + value of remaining capacity after taking the item)
-                # or (value without taking current item)
-                dp[i][w] = max(values[i-1] + dp[i-1][w-weights[i-1]], dp[i-1][w])
-            else:
-                # If current item's weight exceeds capacity, we can't take it
-                dp[i][w] = dp[i-1][w]
-
-    return dp[n][capacity]
+    return results
 
 
-def knapsack_01_with_items(weights, values, capacity):
-    """
-    Solves the 0/1 Knapsack Problem using Dynamic Programming and returns the selected items.
+def main():
+    """Main function demonstrating knapsack problem solutions."""
+    print("=== Knapsack Problem Demo ===\n")
 
-    Args:
-        weights (List[int]): List of weights for each item
-        values (List[int]): List of values for each item
-        capacity (int): Maximum weight capacity of the knapsack
-
-    Returns:
-        tuple: (maximum value, list of indices of selected items)
-
-    Example:
-        >>> weights = [2, 3, 4, 5]
-        >>> values = [3, 4, 5, 6]
-        >>> capacity = 8
-        >>> knapsack_01_with_items(weights, values, capacity)
-        (10, [0, 2])  # Max value 10 by selecting items at indices 0 and 2
-    """
-    n = len(weights)  # Number of items
-
-    # Initialize DP table
-    dp = [[0 for _ in range(capacity + 1)] for _ in range(n + 1)]
-
-    # Fill the DP table bottom-up
-    for i in range(1, n + 1):
-        for w in range(capacity + 1):
-            if weights[i-1] <= w:
-                dp[i][w] = max(values[i-1] + dp[i-1][w-weights[i-1]], dp[i-1][w])
-            else:
-                dp[i][w] = dp[i-1][w]
-
-    # Backtrack to find the selected items
-    max_value = dp[n][capacity]
-    selected_items = []
-    w = capacity
-
-    for i in range(n, 0, -1):
-        # If the value comes from including the current item
-        if dp[i][w] != dp[i-1][w]:
-            selected_items.append(i-1)  # Add the item index
-            w -= weights[i-1]  # Reduce the remaining capacity
-
-    # Reverse to get items in original order
-    selected_items.reverse()
-
-    return max_value, selected_items
-
-
-# Example usage
-if __name__ == "__main__":
-    # Example 1: Basic knapsack
+    # Example 1: Basic problem
+    print("Example 1: Basic Knapsack Problem")
     weights = [2, 3, 4, 5]
     values = [3, 4, 5, 6]
     capacity = 8
 
-    max_value = knapsack_01(weights, values, capacity)
-    print(f"Maximum value: {max_value}")
+    print(f"Items: {list(zip(weights, values))}")
+    print(f"Capacity: {capacity}")
 
-    # Example 2: With item selection
-    max_value, selected_items = knapsack_01_with_items(weights, values, capacity)
+    max_value, selected_items = knapsack_dp(values, weights, capacity, return_items=True)
+    total_weight = sum(weights[i] for i in selected_items)
+
     print(f"Maximum value: {max_value}")
     print(f"Selected items (indices): {selected_items}")
-
-    # Display the selected items with their weights and values
-    total_weight = sum(weights[i] for i in selected_items)
-    print("\nSelected items:")
+    print(f"Selected items details:")
     for i in selected_items:
-        print(f"Item {i}: Weight = {weights[i]}, Value = {values[i]}")
-    print(f"Total weight: {total_weight}")
-    print(f"Total value: {max_value}")
+        print(f"  Item {i}: Weight = {weights[i]}, Value = {values[i]}")
+    print(f"Total weight: {total_weight}/{capacity}")
+    print()
+
+    # Example 2: Random larger problem
+    print("Example 2: Larger Random Problem")
+    n_items = 15
+    knapsack_capacity = 100
+
+    values, weights = generate_random_items(n_items, seed=42)
+
+    print(f"Number of items: {n_items}")
+    print(f"Capacity: {knapsack_capacity}")
+
+    results = compare_algorithms(values, weights, knapsack_capacity)
+
+    print(f"\nResults:")
+    print(f"DP Algorithm: Value = {results['dp']['value']}, Time = {results['dp']['time']:.6f}s")
+    print(f"Recursive Algorithm: Value = {results['recursive']['value']}, Time = {results['recursive']['time']:.6f}s")
+    print(f"Selected items: {results['dp']['items']}")
+
+    # Visualize the solution
+    print("\nGenerating visualization...")
+    visualize_knapsack_solution(values, weights, knapsack_capacity, results['dp']['items'])
+
+
+# Example usage and testing
+if __name__ == "__main__":
+    main()
