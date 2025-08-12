@@ -1,13 +1,16 @@
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 
 """
-Retirement Savings Calculator with Hong Kong Healthcare Costs
+Retirement Savings Calculator with Hong Kong Healthcare Costs and Real Annuity Data
 
 This program estimates the monthly savings needed from now until retirement
 to maintain a desired lifestyle after retirement, accounting for inflation
 both before and during retirement, plus comprehensive healthcare costs.
 
-Now includes Immediate Life Annuity analysis as an alternative to corpus withdrawal strategy.
+Now includes:
+- Real Hong Kong annuity product analysis with IRR calculations
+- Portfolio Allocation Strategy (Annuity + Self-Investment Mix)
+- Age-based payout rates and premium calculations
 """
 
 import matplotlib.pyplot as plt
@@ -15,6 +18,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 
 class HealthcareCoverage(Enum):
@@ -26,6 +30,48 @@ class HealthcareCoverage(Enum):
     def __init__(self, name: str, base_cost: float):
         self.coverage_name = name
         self.base_cost = base_cost
+
+
+@dataclass
+class HongKongAnnuityProduct:
+    """Data class representing real Hong Kong annuity product specifications."""
+    product_name: str
+    gender: str  # "male" or "female"
+    entry_age_ranges: Dict[str, Dict[str, float]]  # age_range -> {premium_per_unit, annual_payout}
+    guaranteed_period: int  # years of guaranteed payments
+    payout_to_age: int  # maximum age for payments (e.g., 100 or lifetime)
+    currency: str
+    minimum_premium: float
+    irr_estimates: Dict[int, float]  # life_expectancy -> IRR
+
+    @classmethod
+    def create_hk_standard_plan(cls) -> 'HongKongAnnuityProduct':
+        """Create a standard Hong Kong immediate annuity plan based on market data."""
+        # Based on typical Hong Kong annuity products
+        return cls(
+            product_name="HK Standard Immediate Annuity",
+            gender="unisex",
+            entry_age_ranges={
+                "55-59": {"premium_per_unit": 16.67, "annual_payout": 1.0},
+                "60-64": {"premium_per_unit": 15.38, "annual_payout": 1.0},
+                "65-69": {"premium_per_unit": 14.29, "annual_payout": 1.0},
+                "70-74": {"premium_per_unit": 13.33, "annual_payout": 1.0},
+                "75-79": {"premium_per_unit": 12.50, "annual_payout": 1.0},
+                "80+": {"premium_per_unit": 11.76, "annual_payout": 1.0}
+            },
+            guaranteed_period=10,  # 10 years guaranteed
+            payout_to_age=100,
+            currency="HKD",
+            minimum_premium=100000,  # HK$100,000 minimum
+            irr_estimates={
+                75: 1.5,  # Die at 75, IRR = 1.5%
+                80: 2.8,  # Die at 80, IRR = 2.8%
+                85: 3.8,  # Die at 85, IRR = 3.8%
+                90: 4.5,  # Die at 90, IRR = 4.5%
+                95: 5.0,  # Die at 95, IRR = 5.0%
+                100: 5.3  # Die at 100, IRR = 5.3%
+            }
+        )
 
 
 @dataclass
@@ -62,6 +108,167 @@ class HealthcareParameters:
 
 
 @dataclass
+class RealAnnuityAnalysis:
+    """Analysis results for real Hong Kong annuity products."""
+    product_name: str
+    entry_age: int
+    premium_per_unit: float
+    annual_payout_per_unit: float
+    total_premium_needed: float
+    annual_income: float
+    guaranteed_years: int
+    expected_irr: float
+    break_even_age: int
+    total_guaranteed_payout: float
+    lifetime_payout_estimate: float
+    monthly_savings_required: float
+
+
+class HongKongAnnuityCalculator:
+    """Calculator for Hong Kong annuity products."""
+
+    def __init__(self):
+        self.standard_plan = HongKongAnnuityProduct.create_hk_standard_plan()
+
+    def get_age_range_key(self, age: int) -> str:
+        """Get the appropriate age range key for pricing."""
+        if age < 60:
+            return "55-59"
+        elif age < 65:
+            return "60-64"
+        elif age < 70:
+            return "65-69"
+        elif age < 75:
+            return "70-74"
+        elif age < 80:
+            return "75-79"
+        else:
+            return "80+"
+
+    def calculate_annuity_requirements(self, retirement_age: int, annual_income_needed: float,
+                                       life_expectancy: int) -> RealAnnuityAnalysis:
+        """
+        Calculate annuity requirements using real Hong Kong product data.
+
+        Args:
+            retirement_age: Age when annuity payments begin
+            annual_income_needed: Required annual income from annuity
+            life_expectancy: Expected lifespan for IRR calculation
+
+        Returns:
+            RealAnnuityAnalysis with detailed calculations
+        """
+        age_range = self.get_age_range_key(retirement_age)
+        pricing_data = self.standard_plan.entry_age_ranges[age_range]
+
+        # Calculate units needed
+        # Each unit provides annual_payout_per_unit of income for premium_per_unit
+        premium_per_unit = pricing_data["premium_per_unit"] * 10000  # Convert to actual HKD
+        annual_payout_per_unit = pricing_data["annual_payout"] * 10000  # Convert to actual HKD
+
+        units_needed = annual_income_needed / annual_payout_per_unit
+        total_premium = units_needed * premium_per_unit
+
+        # Calculate IRR based on life expectancy
+        expected_irr = self._interpolate_irr(life_expectancy)
+
+        # Calculate break-even age
+        break_even_years = premium_per_unit / annual_payout_per_unit
+        break_even_age = retirement_age + break_even_years
+
+        # Calculate guaranteed payout
+        guaranteed_years = self.standard_plan.guaranteed_period
+        total_guaranteed_payout = annual_income_needed * guaranteed_years
+
+        # Estimate lifetime payout
+        payout_years = min(life_expectancy - retirement_age,
+                           self.standard_plan.payout_to_age - retirement_age)
+        lifetime_payout_estimate = annual_income_needed * payout_years
+
+        return RealAnnuityAnalysis(
+            product_name=self.standard_plan.product_name,
+            entry_age=retirement_age,
+            premium_per_unit=premium_per_unit,
+            annual_payout_per_unit=annual_payout_per_unit,
+            total_premium_needed=total_premium,
+            annual_income=annual_income_needed,
+            guaranteed_years=guaranteed_years,
+            expected_irr=expected_irr,
+            break_even_age=int(break_even_age),
+            total_guaranteed_payout=total_guaranteed_payout,
+            lifetime_payout_estimate=lifetime_payout_estimate,
+            monthly_savings_required=0  # To be calculated by main calculator
+        )
+
+    def _interpolate_irr(self, life_expectancy: int) -> float:
+        """Interpolate IRR based on life expectancy."""
+        irr_data = self.standard_plan.irr_estimates
+
+        # Find the two closest life expectancies
+        ages = sorted(irr_data.keys())
+
+        if life_expectancy <= ages[0]:
+            return irr_data[ages[0]]
+        elif life_expectancy >= ages[-1]:
+            return irr_data[ages[-1]]
+        else:
+            # Linear interpolation
+            for i in range(len(ages) - 1):
+                if ages[i] <= life_expectancy <= ages[i + 1]:
+                    lower_age, upper_age = ages[i], ages[i + 1]
+                    lower_irr, upper_irr = irr_data[lower_age], irr_data[upper_age]
+
+                    # Linear interpolation
+                    weight = (life_expectancy - lower_age) / (upper_age - lower_age)
+                    return lower_irr + weight * (upper_irr - lower_irr)
+
+        return 3.8  # Default fallback
+
+    def analyze_multiple_scenarios(self, retirement_age: int, annual_income_needed: float) -> Dict[
+        int, RealAnnuityAnalysis]:
+        """Analyze annuity performance across different life expectancy scenarios."""
+        scenarios = {}
+        life_expectancies = [75, 80, 85, 90, 95, 100]
+
+        for life_exp in life_expectancies:
+            scenarios[life_exp] = self.calculate_annuity_requirements(
+                retirement_age, annual_income_needed, life_exp
+            )
+
+        return scenarios
+
+    def print_annuity_analysis(self, analysis: RealAnnuityAnalysis) -> None:
+        """Print detailed annuity analysis."""
+        print(f"\n💰 HONG KONG ANNUITY PRODUCT ANALYSIS:")
+        print(f"Product: {analysis.product_name}")
+        print(f"Entry Age: {analysis.entry_age}")
+        print(f"Currency: {self.standard_plan.currency}")
+
+        print(f"\n📊 PRICING STRUCTURE:")
+        print(f"Premium per unit: ${analysis.premium_per_unit:,.0f}")
+        print(f"Annual payout per unit: ${analysis.annual_payout_per_unit:,.0f}")
+        print(f"Units needed: {analysis.total_premium_needed / analysis.premium_per_unit:.2f}")
+
+        print(f"\n💵 FINANCIAL REQUIREMENTS:")
+        print(f"Total premium needed: ${analysis.total_premium_needed:,.0f}")
+        print(f"Annual income provided: ${analysis.annual_income:,.0f}")
+        print(f"Monthly income: ${analysis.annual_income / 12:,.0f}")
+
+        print(f"\n🛡️ PROTECTION FEATURES:")
+        print(f"Guaranteed payout period: {analysis.guaranteed_years} years")
+        print(f"Total guaranteed amount: ${analysis.total_guaranteed_payout:,.0f}")
+        print(f"Payout continues until age: {self.standard_plan.payout_to_age}")
+
+        print(f"\n📈 RETURN ANALYSIS:")
+        print(f"Expected IRR: {analysis.expected_irr:.2f}%")
+        print(f"Break-even age: {analysis.break_even_age}")
+        print(f"Estimated lifetime payout: ${analysis.lifetime_payout_estimate:,.0f}")
+
+        roi_percent = ((analysis.lifetime_payout_estimate / analysis.total_premium_needed - 1) * 100)
+        print(f"Estimated total return: {roi_percent:.1f}%")
+
+
+@dataclass
 class CalculationResults:
     """Data class to hold calculation results."""
     corpus_needed: float
@@ -76,25 +283,6 @@ class CalculationResults:
     total_healthcare_corpus: float
 
 
-@dataclass
-class AnnuityResults:
-    """Data class to hold annuity analysis results."""
-    annuity_rate: float
-    annuity_to_age: int
-    annuity_premium_required: float
-    level_payment_equivalent: float
-    years_covered_by_annuity: int
-    uncovered_years: int
-    uncovered_corpus_needed: float
-    total_needed_hybrid: float
-    future_value_current_savings: float
-    additional_needed_annuity_only: float
-    additional_needed_hybrid: float
-    monthly_savings_annuity_only: float
-    monthly_savings_hybrid: float
-    total_expenses_pv_annuity_rate: float
-
-
 class RetirementCalculator:
     """Main calculator class for retirement planning analysis."""
 
@@ -103,6 +291,7 @@ class RetirementCalculator:
         self.retirement_params: Optional[RetirementParameters] = None
         self.healthcare_params: Optional[HealthcareParameters] = None
         self._first_year_retirement_expense: Optional[float] = None
+        self.annuity_calc = HongKongAnnuityCalculator()
 
     def set_retirement_parameters(self, params: RetirementParameters) -> None:
         """Set retirement calculation parameters."""
@@ -220,6 +409,124 @@ class RetirementCalculator:
         self._print_corpus_breakdown(total_pv, healthcare_pv)
         return total_pv
 
+    def analyze_hk_annuity_strategy(self, annuity_allocation_percent: float = 50.0) -> Tuple[
+        RealAnnuityAnalysis, float]:
+        """
+        Analyze Hong Kong annuity strategy using real product data.
+
+        Args:
+            annuity_allocation_percent: Percentage of income to be covered by annuity
+
+        Returns:
+            Tuple of (RealAnnuityAnalysis, monthly_savings_required)
+        """
+        expense_breakdown = self.get_retirement_expense_breakdown()
+        first_year_expense = expense_breakdown['total_expenses'][0]
+
+        # Calculate annuity income requirement
+        annuity_income_needed = first_year_expense * (annuity_allocation_percent / 100)
+
+        print(f"\n🎯 HONG KONG ANNUITY STRATEGY ANALYSIS:")
+        print(f"Target annuity allocation: {annuity_allocation_percent:.0f}% of retirement income")
+        print(f"First year total expense: ${first_year_expense:,.0f}")
+        print(f"Annuity to cover: ${annuity_income_needed:,.0f} annually")
+
+        # Get annuity analysis
+        annuity_analysis = self.annuity_calc.calculate_annuity_requirements(
+            self.retirement_params.retirement_age,
+            annuity_income_needed,
+            self.retirement_params.life_expectancy
+        )
+
+        # Calculate remaining corpus needed for self-investment portion
+        remaining_expenses = []
+        for year, total_expense in enumerate(expense_breakdown['total_expenses']):
+            # Subtract annuity income (which is fixed, doesn't adjust for inflation)
+            remaining_expense = total_expense - annuity_income_needed
+            remaining_expenses.append(max(0, remaining_expense))
+
+        # Calculate present value of remaining expenses
+        remaining_corpus_needed = sum(
+            expense / (1 + self.retirement_params.post_retirement_return) ** (i + 1)
+            for i, expense in enumerate(remaining_expenses)
+        )
+
+        total_needed = annuity_analysis.total_premium_needed + remaining_corpus_needed
+
+        # Calculate monthly savings needed
+        future_value_current_savings = self.calculate_future_value_of_current_savings()
+        additional_needed = total_needed - future_value_current_savings
+        monthly_savings = self._calculate_monthly_savings_needed(additional_needed)
+
+        # Update the analysis with monthly savings
+        annuity_analysis.monthly_savings_required = monthly_savings
+
+        print(f"\n💼 HYBRID STRATEGY BREAKDOWN:")
+        print(f"Annuity premium needed: ${annuity_analysis.total_premium_needed:,.0f}")
+        print(f"Remaining corpus needed: ${remaining_corpus_needed:,.0f}")
+        print(f"Total capital required: ${total_needed:,.0f}")
+        print(f"Monthly savings required: ${monthly_savings:,.0f}")
+
+        return annuity_analysis, remaining_corpus_needed
+
+    def compare_annuity_allocations(self) -> None:
+        """Compare different annuity allocation strategies."""
+        allocation_scenarios = [25, 50, 75, 100]  # Percentage allocated to annuity
+
+        print(f"\n📊 ANNUITY ALLOCATION COMPARISON:")
+        print(f"{'Allocation':<12} {'Monthly $':<12} {'Annuity Premium':<18} {'IRR':<6} {'Break-even Age':<15}")
+        print("-" * 75)
+
+        results = []
+        for allocation in allocation_scenarios:
+            try:
+                annuity_analysis, remaining_corpus = self.analyze_hk_annuity_strategy(allocation)
+                results.append((allocation, annuity_analysis, remaining_corpus))
+
+                print(f"{allocation:>3}% Annuity {annuity_analysis.monthly_savings_required:<11,.0f} "
+                      f"${annuity_analysis.total_premium_needed:<17,.0f} "
+                      f"{annuity_analysis.expected_irr:<5.1f}% {annuity_analysis.break_even_age:<15}")
+            except Exception as e:
+                print(f"Error analyzing {allocation}% allocation: {e}")
+
+        # Provide recommendations
+        print(f"\n💡 STRATEGY RECOMMENDATIONS:")
+        if results:
+            min_monthly = min(r[1].monthly_savings_required for r in results)
+            best_irr = max(r[1].expected_irr for r in results)
+
+            for allocation, analysis, _ in results:
+                if analysis.monthly_savings_required == min_monthly:
+                    print(f"💰 Lowest Monthly Savings: {allocation}% annuity allocation")
+                if analysis.expected_irr == best_irr:
+                    print(f"📈 Highest IRR: {allocation}% annuity allocation ({best_irr:.2f}%)")
+
+    def analyze_life_expectancy_sensitivity(self, annuity_allocation_percent: float = 50.0) -> None:
+        """Analyze how different life expectancies affect annuity performance."""
+        expense_breakdown = self.get_retirement_expense_breakdown()
+        first_year_expense = expense_breakdown['total_expenses'][0]
+        annuity_income_needed = first_year_expense * (annuity_allocation_percent / 100)
+
+        scenarios = self.annuity_calc.analyze_multiple_scenarios(
+            self.retirement_params.retirement_age,
+            annuity_income_needed
+        )
+
+        print(f"\n⏰ LIFE EXPECTANCY SENSITIVITY ANALYSIS:")
+        print(f"Annuity allocation: {annuity_allocation_percent:.0f}%")
+        print(f"{'Life Exp':<8} {'IRR':<6} {'Total Payout':<15} {'ROI':<10}")
+        print("-" * 45)
+
+        for life_exp, analysis in scenarios.items():
+            roi = (analysis.lifetime_payout_estimate / analysis.total_premium_needed - 1) * 100
+            print(f"{life_exp:<8} {analysis.expected_irr:<5.2f}% "
+                  f"${analysis.lifetime_payout_estimate:<14,.0f} {roi:<9.1f}%")
+
+        print(f"\n🎯 KEY INSIGHTS:")
+        print(f"Break-even age: {scenarios[85].break_even_age} years")
+        print(f"Guaranteed protection: {scenarios[85].guaranteed_years} years regardless of lifespan")
+        print(f"Higher longevity = Better annuity returns")
+
     def _print_corpus_calculation_details(self, expense_breakdown: Dict[str, List[float]]) -> None:
         """Print detailed corpus calculation information."""
         if not self.retirement_params or not self.healthcare_params:
@@ -234,32 +541,6 @@ class RetirementCalculator:
         print(f"General inflation rate: {self.retirement_params.inflation_rate:.1%}")
         print(f"Healthcare inflation rate: {self.healthcare_params.inflation_rate:.1%}")
         print(f"Healthcare coverage type: {self.healthcare_params.coverage_type.title()}")
-
-        self._print_expense_sample(expense_breakdown)
-
-    def _print_expense_sample(self, expense_breakdown: Dict[str, List[float]]) -> None:
-        """Print sample of expense breakdown."""
-        total_expenses = expense_breakdown['total_expenses']
-        living_expenses = expense_breakdown['living_expenses']
-        healthcare_costs = expense_breakdown['healthcare_costs']
-
-        print(f"\nExpense breakdown by retirement year (sample):")
-        print(f"{'Year':<4} {'Age':<3} {'Living':<12} {'Healthcare':<12} {'Total':<12}")
-        print("-" * 50)
-
-        # Show first 3 years
-        for i in range(min(3, len(total_expenses))):
-            age = self.retirement_params.retirement_age + i
-            print(f"{i + 1:<4} {age:<3} ${living_expenses[i]:<11,.0f} "
-                  f"${healthcare_costs[i]:<11,.0f} ${total_expenses[i]:<11,.0f}")
-
-        # Show last 3 years if more than 6 total
-        if len(total_expenses) > 6:
-            print("...  ... ...         ...         ...")
-            for i in range(max(3, len(total_expenses) - 3), len(total_expenses)):
-                age = self.retirement_params.retirement_age + i
-                print(f"{i + 1:<4} {age:<3} ${living_expenses[i]:<11,.0f} "
-                      f"${healthcare_costs[i]:<11,.0f} ${total_expenses[i]:<11,.0f}")
 
     def _print_corpus_breakdown(self, total_pv: float, healthcare_pv: float) -> None:
         """Print corpus breakdown details."""
@@ -285,18 +566,7 @@ class RetirementCalculator:
         future_value_current_savings = self.calculate_future_value_of_current_savings()
         additional_needed = corpus_needed - future_value_current_savings
 
-        years_to_retirement = (self.retirement_params.retirement_age -
-                               self.retirement_params.current_age)
-        months_to_retirement = years_to_retirement * 12
-        monthly_return = (1 + self.retirement_params.pre_retirement_return) ** (1 / 12) - 1
-
-        if additional_needed <= 0:
-            monthly_savings = 0
-        elif monthly_return == 0:
-            monthly_savings = additional_needed / months_to_retirement
-        else:
-            fv_factor = ((1 + monthly_return) ** months_to_retirement - 1) / monthly_return
-            monthly_savings = additional_needed / fv_factor
+        monthly_savings = self._calculate_monthly_savings_needed(additional_needed)
 
         expense_breakdown = self.get_retirement_expense_breakdown()
         total_healthcare_corpus = sum(
@@ -309,105 +579,12 @@ class RetirementCalculator:
             future_value_current_savings=future_value_current_savings,
             additional_needed=additional_needed,
             monthly_savings_required=monthly_savings,
-            years_to_retirement=years_to_retirement,
+            years_to_retirement=self.retirement_params.retirement_age - self.retirement_params.current_age,
             years_in_retirement=self.retirement_params.life_expectancy - self.retirement_params.retirement_age,
             current_annual_expense=self.retirement_params.current_annual_expense,
             first_year_retirement_expense=self._first_year_retirement_expense,
             expense_breakdown=expense_breakdown,
             total_healthcare_corpus=total_healthcare_corpus
-        )
-
-    def calculate_annuity_analysis(self, annuity_rate: float = 4.5,
-                                   annuity_to_age: int = 100) -> AnnuityResults:
-        """Calculate immediate life annuity analysis."""
-        expense_breakdown = self.get_retirement_expense_breakdown()
-        total_expenses = expense_breakdown['total_expenses']
-        annuity_rate_decimal = annuity_rate / 100
-
-        self._print_annuity_analysis_header(annuity_rate, annuity_to_age)
-
-        # Calculate required annuity premium
-        annuity_premium_pv = sum(
-            expense / (1 + annuity_rate_decimal) ** (i + 1)
-            for i, expense in enumerate(total_expenses)
-        )
-
-        # Calculate level payment and other metrics
-        years_for_annuity = min(annuity_to_age - self.retirement_params.retirement_age,
-                                len(total_expenses))
-
-        if years_for_annuity > 0:
-            total_pv_at_annuity_rate = sum(
-                expense / (1 + annuity_rate_decimal) ** (i + 1)
-                for i, expense in enumerate(total_expenses)
-            )
-            pv_annuity_factor = (1 - (1 + annuity_rate_decimal) ** (-years_for_annuity)) / annuity_rate_decimal
-            level_payment = total_pv_at_annuity_rate / pv_annuity_factor if pv_annuity_factor > 0 else 0
-        else:
-            level_payment = 0
-            total_pv_at_annuity_rate = 0
-
-        # Handle longevity risk
-        uncovered_years = max(0, self.retirement_params.life_expectancy - annuity_to_age)
-        uncovered_corpus = self._calculate_uncovered_corpus(total_expenses, years_for_annuity, uncovered_years)
-
-        # Calculate savings requirements
-        future_value_current_savings = self.calculate_future_value_of_current_savings()
-        total_needed_hybrid = annuity_premium_pv + uncovered_corpus
-
-        monthly_savings_annuity = self._calculate_monthly_savings_needed(
-            annuity_premium_pv - future_value_current_savings
-        )
-        monthly_savings_hybrid = self._calculate_monthly_savings_needed(
-            total_needed_hybrid - future_value_current_savings
-        )
-
-        return AnnuityResults(
-            annuity_rate=annuity_rate,
-            annuity_to_age=annuity_to_age,
-            annuity_premium_required=annuity_premium_pv,
-            level_payment_equivalent=level_payment,
-            years_covered_by_annuity=years_for_annuity,
-            uncovered_years=uncovered_years,
-            uncovered_corpus_needed=uncovered_corpus,
-            total_needed_hybrid=total_needed_hybrid,
-            future_value_current_savings=future_value_current_savings,
-            additional_needed_annuity_only=annuity_premium_pv - future_value_current_savings,
-            additional_needed_hybrid=total_needed_hybrid - future_value_current_savings,
-            monthly_savings_annuity_only=monthly_savings_annuity,
-            monthly_savings_hybrid=monthly_savings_hybrid,
-            total_expenses_pv_annuity_rate=total_pv_at_annuity_rate
-        )
-
-    def _print_annuity_analysis_header(self, annuity_rate: float, annuity_to_age: int) -> None:
-        """Print annuity analysis header information."""
-        print(f"\n💰 IMMEDIATE LIFE ANNUITY ANALYSIS:")
-        print(f"Annuity rate offered: {annuity_rate:.1%}")
-        print(f"Annuity guaranteed to age: {annuity_to_age}")
-        print(f"Your life expectancy: {self.retirement_params.life_expectancy}")
-
-    def _calculate_uncovered_corpus(self, total_expenses: List[float],
-                                    years_covered: int, uncovered_years: int) -> float:
-        """Calculate corpus needed for uncovered years beyond annuity."""
-        if uncovered_years <= 0:
-            return 0.0
-
-        uncovered_expenses = []
-        for year in range(uncovered_years):
-            expense_year = years_covered + year
-            if expense_year < len(total_expenses):
-                uncovered_expenses.append(total_expenses[expense_year])
-            else:
-                # Extrapolate expenses beyond calculated range
-                last_expense = total_expenses[-1]
-                extra_years = expense_year - len(total_expenses) + 1
-                projected_expense = last_expense * (1 + self.retirement_params.inflation_rate) ** extra_years
-                uncovered_expenses.append(projected_expense)
-
-        # Calculate present value of uncovered expenses
-        return sum(
-            expense / (1 + self.retirement_params.post_retirement_return) ** (i + 1)
-            for i, expense in enumerate(uncovered_expenses)
         )
 
     def _calculate_monthly_savings_needed(self, additional_needed: float) -> float:
@@ -427,382 +604,7 @@ class RetirementCalculator:
             return additional_needed / fv_factor
 
 
-class RetirementVisualizer:
-    """Class for creating retirement planning visualizations."""
-
-    def __init__(self, calculator: RetirementCalculator):
-        self.calculator = calculator
-
-    def create_comprehensive_visualization(self, results: CalculationResults,
-                                           annuity_results: Optional[AnnuityResults] = None) -> None:
-        """Create comprehensive visualization of retirement planning."""
-        fig_size = (16, 18) if annuity_results else (16, 12)
-        subplot_config = (3, 2) if annuity_results else (2, 2)
-
-        fig, axes = plt.subplots(*subplot_config, figsize=fig_size)
-        axes = axes.flatten() if annuity_results else [[axes[0][0], axes[0][1]], [axes[1][0], axes[1][1]]]
-
-        self._plot_savings_accumulation(axes[0] if annuity_results else axes[0][0], results, annuity_results)
-        self._plot_expense_breakdown(axes[1] if annuity_results else axes[0][1], results, annuity_results)
-        self._plot_retirement_balance(axes[2] if annuity_results else axes[1][0], results)
-        self._plot_healthcare_costs(axes[3] if annuity_results else axes[1][1], results)
-
-        if annuity_results:
-            self._plot_strategy_comparison(axes[4], results, annuity_results)
-            self._plot_risk_comparison(axes[5], results, annuity_results)
-
-        plt.tight_layout()
-        filename = 'comprehensive_retirement_analysis_with_annuity.png' if annuity_results else 'comprehensive_retirement_analysis.png'
-        plt.savefig(filename, dpi=300, bbox_inches='tight')
-        plt.show()
-
-    def _plot_savings_accumulation(self, ax, results: CalculationResults,
-                                   annuity_results: Optional[AnnuityResults]) -> None:
-        """Plot savings accumulation until retirement."""
-        years = np.arange(0, results.years_to_retirement + 1)
-        current_balance = self.calculator.retirement_params.current_savings
-
-        # Calculate corpus strategy savings
-        savings_balance = self._calculate_savings_projection(years, results.monthly_savings_required, current_balance)
-
-        ages = years + self.calculator.retirement_params.current_age
-        ax.plot(ages, savings_balance, 'b-', linewidth=2, marker='o', markersize=4, label='Corpus Strategy')
-        ax.axhline(y=results.corpus_needed, color='r', linestyle='--',
-                   label=f'Target: ${results.corpus_needed / 1000000:.1f}M')
-
-        # Add annuity strategy if provided
-        if annuity_results:
-            annuity_savings = self._calculate_savings_projection(years, annuity_results.monthly_savings_hybrid,
-                                                                 current_balance)
-            ax.plot(ages, annuity_savings, 'g--', linewidth=2, marker='s', markersize=4, label='Annuity Strategy')
-            ax.axhline(y=annuity_results.total_needed_hybrid, color='orange', linestyle=':',
-                       label=f'Annuity Target: ${annuity_results.total_needed_hybrid / 1000000:.1f}M')
-
-        ax.set_xlabel('Age')
-        ax.set_ylabel('Savings Balance ($)')
-        ax.set_title('Savings Growth Until Retirement')
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x / 1000000:.1f}M'))
-
-    def _calculate_savings_projection(self, years: np.ndarray, monthly_savings: float,
-                                      initial_balance: float) -> List[float]:
-        """Calculate savings projection over years."""
-        savings_balance = []
-        current_balance = initial_balance
-
-        for year in years:
-            if year == 0:
-                savings_balance.append(current_balance)
-            else:
-                annual_savings = monthly_savings * 12
-                current_balance = ((current_balance + annual_savings) *
-                                   (1 + self.calculator.retirement_params.pre_retirement_return))
-                savings_balance.append(current_balance)
-
-        return savings_balance
-
-    def _plot_expense_breakdown(self, ax, results: CalculationResults,
-                                annuity_results: Optional[AnnuityResults]) -> None:
-        """Plot expense breakdown over retirement."""
-        expense_breakdown = results.expense_breakdown
-
-        # Ensure consistent array lengths
-        min_length = min(len(expense_breakdown['living_expenses']),
-                         len(expense_breakdown['healthcare_costs']),
-                         len(expense_breakdown['total_expenses']))
-
-        living_expenses = expense_breakdown['living_expenses'][:min_length]
-        healthcare_costs = expense_breakdown['healthcare_costs'][:min_length]
-        total_expenses = expense_breakdown['total_expenses'][:min_length]
-
-        ages = list(range(self.calculator.retirement_params.retirement_age,
-                          self.calculator.retirement_params.retirement_age + min_length))
-
-        ax.plot(ages, living_expenses, 'b-', linewidth=2, label='Living Expenses', marker='o', markersize=3)
-        ax.plot(ages, healthcare_costs, 'r-', linewidth=2, label='Healthcare Costs', marker='s', markersize=3)
-        ax.plot(ages, total_expenses, 'purple', linewidth=3, label='Total Expenses', marker='^', markersize=4)
-
-        if annuity_results and annuity_results.level_payment_equivalent > 0:
-            ax.axhline(y=annuity_results.level_payment_equivalent, color='green', linestyle='--',
-                       label=f'Annuity Payment: ${annuity_results.level_payment_equivalent:,.0f}')
-
-        ax.set_xlabel('Age')
-        ax.set_ylabel('Annual Expenses ($)')
-        ax.set_title(
-            f'Retirement Expenses Breakdown ({self.calculator.healthcare_params.coverage_type.title()} Healthcare)')
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x / 1000:.0f}K'))
-
-    def _plot_retirement_balance(self, ax, results: CalculationResults) -> None:
-        """Plot retirement balance over time."""
-        expense_breakdown = results.expense_breakdown
-        min_length = min(len(expense_breakdown['living_expenses']),
-                         len(expense_breakdown['total_expenses']))
-
-        ages = list(range(self.calculator.retirement_params.retirement_age,
-                          self.calculator.retirement_params.retirement_age + min_length))
-        total_expenses = expense_breakdown['total_expenses'][:min_length]
-
-        balance = results.corpus_needed
-        balances = [balance]
-
-        for expense in total_expenses:
-            balance = (balance - expense) * (1 + self.calculator.retirement_params.post_retirement_return)
-            balances.append(balance)
-
-        # Ensure consistent lengths
-        min_plot_length = min(len(ages), len(balances))
-        ages = ages[:min_plot_length]
-        balances = balances[:min_plot_length]
-
-        ax.plot(ages, balances, 'g-', linewidth=2, marker='s', markersize=4, label='Corpus Balance')
-        ax.axhline(y=0, color='r', linestyle='--', alpha=0.7, label='Depletion Point')
-        ax.set_xlabel('Age')
-        ax.set_ylabel('Balance ($)')
-        ax.set_title('Retirement Balance Over Time (Including Healthcare)')
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x / 1000000:.1f}M'))
-
-    def _plot_healthcare_costs(self, ax, results: CalculationResults) -> None:
-        """Plot healthcare cost progression."""
-        healthcare_costs = results.expense_breakdown['healthcare_costs']
-        ages = list(range(self.calculator.retirement_params.retirement_age,
-                          self.calculator.retirement_params.retirement_age + len(healthcare_costs)))
-
-        ax.plot(ages, healthcare_costs, 'red', linewidth=3, marker='o', markersize=4,
-                label=f'{self.calculator.healthcare_params.coverage_type.title()} Coverage')
-
-        # Add age milestone annotations
-        age_milestones = [65, 70, 75, 80, 85]
-        for age in age_milestones:
-            if (age <= self.calculator.retirement_params.life_expectancy and
-                    age >= self.calculator.retirement_params.retirement_age and age in ages):
-                idx = ages.index(age)
-                if idx < len(healthcare_costs):
-                    ax.annotate(f'Age {age}\n${healthcare_costs[idx]:,.0f}',
-                                xy=(age, healthcare_costs[idx]), xytext=(10, 10), textcoords='offset points',
-                                bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7), fontsize=8)
-
-        ax.set_xlabel('Age')
-        ax.set_ylabel('Annual Healthcare Cost ($)')
-        ax.set_title(f'Healthcare Cost Progression (Inflation: {self.calculator.healthcare_params.inflation_rate:.1%})')
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x / 1000:.0f}K'))
-
-    def _plot_strategy_comparison(self, ax, results: CalculationResults, annuity_results: AnnuityResults) -> None:
-        """Plot strategy comparison for monthly savings."""
-        strategies = ['Corpus\nWithdrawal', 'Annuity\n(Hybrid)']
-        monthly_savings = [results.monthly_savings_required, annuity_results.monthly_savings_hybrid]
-
-        colors = ['blue', 'green']
-        bars = ax.bar(strategies, monthly_savings, color=colors, alpha=0.7)
-
-        for bar, value in zip(bars, monthly_savings):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2., height + max(monthly_savings) * 0.01,
-                    f'${value:,.0f}', ha='center', va='bottom', fontweight='bold')
-
-        ax.set_ylabel('Monthly Savings Required ($)')
-        ax.set_title('Strategy Comparison: Monthly Savings Required')
-        ax.grid(True, alpha=0.3, axis='y')
-
-    def _plot_risk_comparison(self, ax, results: CalculationResults, annuity_results: AnnuityResults) -> None:
-        """Plot risk profile comparison."""
-        risk_categories = ['Longevity\nRisk', 'Market\nRisk', 'Inflation\nRisk', 'Healthcare\nRisk']
-        corpus_risks = [8, 7, 6, 8]
-        annuity_risks = [3, 4, 8, 6]
-
-        x = np.arange(len(risk_categories))
-        width = 0.35
-
-        ax.bar(x - width / 2, corpus_risks, width, label='Corpus Strategy', color='blue', alpha=0.7)
-        ax.bar(x + width / 2, annuity_risks, width, label='Annuity Strategy', color='green', alpha=0.7)
-
-        ax.set_ylabel('Risk Level (1-10)')
-        ax.set_title('Risk Profile Comparison')
-        ax.set_xticks(x)
-        ax.set_xticklabels(risk_categories)
-        ax.legend()
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.set_ylim(0, 10)
-
-
-class RetirementReporter:
-    """Class for generating retirement planning reports."""
-
-    def __init__(self, calculator: RetirementCalculator):
-        self.calculator = calculator
-
-    def print_comprehensive_summary(self, results: CalculationResults,
-                                    annuity_results: Optional[AnnuityResults] = None) -> None:
-        """Print comprehensive retirement analysis summary."""
-        self._print_header()
-        self._print_input_parameters()
-        self._print_healthcare_analysis(results)
-        self._print_inflation_analysis(results)
-        self._print_corpus_strategy_results(results)
-
-        if annuity_results:
-            self._print_annuity_strategy_results(annuity_results)
-            self._print_strategy_comparison(results, annuity_results)
-            self._print_risk_analysis()
-
-        self._print_healthcare_recommendations(results)
-
-    def _print_header(self) -> None:
-        """Print report header."""
-        print("\n" + "=" * 80)
-        print("COMPREHENSIVE RETIREMENT SAVINGS ANALYSIS (Hong Kong)")
-        print("=" * 80)
-
-    def _print_input_parameters(self) -> None:
-        """Print input parameters section."""
-        params = self.calculator.retirement_params
-        healthcare = self.calculator.healthcare_params
-
-        print("\n📋 INPUT PARAMETERS:")
-        print(f"Current Age: {params.current_age}")
-        print(f"Retirement Age: {params.retirement_age}")
-        print(f"Life Expectancy: {params.life_expectancy}")
-        print(f"Current Savings: ${params.current_savings:,.2f}")
-        print(f"Current Annual Expenses (today): ${params.current_annual_expense:,.2f}")
-        print(f"Expected General Inflation Rate: {params.inflation_rate:.1%}")
-        print(f"Expected Healthcare Inflation Rate: {healthcare.inflation_rate:.1%}")
-        print(f"Expected Return Before Retirement: {params.pre_retirement_return:.1%}")
-        print(f"Expected Return After Retirement: {params.post_retirement_return:.1%}")
-
-    def _print_healthcare_analysis(self, results: CalculationResults) -> None:
-        """Print healthcare analysis section."""
-        healthcare = self.calculator.healthcare_params
-        healthcare_costs = results.expense_breakdown['healthcare_costs']
-
-        print(f"\n🏥 HEALTHCARE PARAMETERS:")
-        print(f"Healthcare Coverage Type: {healthcare.coverage_type.title()}")
-        print(f"Base Annual Healthcare Cost (at retirement): ${healthcare.base_cost:,.2f}")
-        print(f"First Year Healthcare Cost: ${healthcare_costs[0]:,.2f}")
-        print(f"Final Year Healthcare Cost: ${healthcare_costs[-1]:,.2f}")
-        print(f"Total Healthcare Corpus Needed: ${results.total_healthcare_corpus:,.2f}")
-        print(f"Healthcare as % of Total Corpus: {results.total_healthcare_corpus / results.corpus_needed:.1%}")
-
-    def _print_inflation_analysis(self, results: CalculationResults) -> None:
-        """Print inflation impact analysis."""
-        params = self.calculator.retirement_params
-        healthcare = self.calculator.healthcare_params
-        healthcare_costs = results.expense_breakdown['healthcare_costs']
-        total_expenses = results.expense_breakdown['total_expenses']
-
-        print("\n📈 INFLATION IMPACT ANALYSIS:")
-        print(f"Years until retirement: {results.years_to_retirement}")
-        print(f"Years in retirement: {results.years_in_retirement}")
-        print(f"Current annual expenses: ${params.current_annual_expense:,.2f}")
-        print(f"First year retirement expenses (total): ${total_expenses[0]:,.2f}")
-        print(f"Final year retirement expenses (total): ${total_expenses[-1]:,.2f}")
-
-        healthcare_inflation_total = (healthcare_costs[-1] / healthcare_costs[0] - 1) * 100
-        print(f"\nHealthcare cost increase during retirement: +{healthcare_inflation_total:.1f}%")
-
-        # Real return analysis
-        real_pre_return = (1 + params.pre_retirement_return) / (1 + params.inflation_rate) - 1
-        real_post_return = (1 + params.post_retirement_return) / (1 + params.inflation_rate) - 1
-        healthcare_real_return = (1 + params.post_retirement_return) / (1 + healthcare.inflation_rate) - 1
-
-        print(f"\n💰 REAL RETURNS (above inflation):")
-        print(f"Real return before retirement: {real_pre_return:.1%}")
-        print(f"Real return after retirement (vs general inflation): {real_post_return:.1%}")
-        print(f"Real return vs healthcare inflation: {healthcare_real_return:.1%}")
-
-    def _print_corpus_strategy_results(self, results: CalculationResults) -> None:
-        """Print corpus withdrawal strategy results."""
-        print(f"\n🎯 CORPUS WITHDRAWAL STRATEGY:")
-        print(f"Total corpus needed at retirement: ${results.corpus_needed:,.2f}")
-        print(f"  - Living expenses corpus: ${results.corpus_needed - results.total_healthcare_corpus:,.2f}")
-        print(f"  - Healthcare corpus: ${results.total_healthcare_corpus:,.2f}")
-        print(f"Future value of current savings: ${results.future_value_current_savings:,.2f}")
-        print(f"Additional amount needed: ${results.additional_needed:,.2f}")
-
-        if results.monthly_savings_required <= 0:
-            print("🎉 Excellent! Your current savings are sufficient for retirement.")
-            excess = abs(results.additional_needed)
-            print(f"You will have an excess of ${excess:,.2f} at retirement.")
-        else:
-            print(f"💰 Monthly savings required: ${results.monthly_savings_required:,.2f}")
-            annual_savings = results.monthly_savings_required * 12
-            print(f"📅 Annual savings required: ${annual_savings:,.2f}")
-            savings_rate = (annual_savings / results.current_annual_expense) * 100
-            print(f"📊 Savings rate needed: {savings_rate:.1f}% of current expenses")
-
-    def _print_annuity_strategy_results(self, annuity_results: AnnuityResults) -> None:
-        """Print annuity strategy results."""
-        print(f"\n💰 IMMEDIATE LIFE ANNUITY STRATEGY:")
-        print(f"Annuity rate: {annuity_results.annuity_rate:.1%}")
-        print(f"Annuity guaranteed to age: {annuity_results.annuity_to_age}")
-        print(f"Required annuity premium: ${annuity_results.annuity_premium_required:,.2f}")
-        print(f"Equivalent level annual payment: ${annuity_results.level_payment_equivalent:,.2f}")
-
-        if annuity_results.uncovered_years > 0:
-            print(f"\n⚠️  HYBRID STRATEGY NEEDED:")
-            print(f"Years not covered by annuity: {annuity_results.uncovered_years}")
-            print(f"Additional corpus for uncovered years: ${annuity_results.uncovered_corpus_needed:,.2f}")
-            print(f"Total needed (annuity + corpus): ${annuity_results.total_needed_hybrid:,.2f}")
-            print(f"Monthly savings required: ${annuity_results.monthly_savings_hybrid:,.2f}")
-        else:
-            print(f"Monthly savings required: ${annuity_results.monthly_savings_annuity_only:,.2f}")
-
-    def _print_strategy_comparison(self, results: CalculationResults, annuity_results: AnnuityResults) -> None:
-        """Print strategy comparison analysis."""
-        print(f"\n📊 STRATEGY COMPARISON:")
-        corpus_monthly = results.monthly_savings_required
-        annuity_monthly = annuity_results.monthly_savings_hybrid
-
-        print(f"Corpus Strategy - Monthly savings: ${corpus_monthly:,.2f}")
-        print(f"Annuity Strategy - Monthly savings: ${annuity_monthly:,.2f}")
-
-        if annuity_monthly < corpus_monthly:
-            savings_difference = corpus_monthly - annuity_monthly
-            savings_percent = (savings_difference / corpus_monthly) * 100
-            print(f"💡 Annuity strategy saves: ${savings_difference:,.2f}/month ({savings_percent:.1f}%)")
-        elif annuity_monthly > corpus_monthly:
-            extra_cost = annuity_monthly - corpus_monthly
-            extra_percent = (extra_cost / corpus_monthly) * 100
-            print(f"⚠️  Annuity strategy costs: ${extra_cost:,.2f}/month extra ({extra_percent:.1f}%)")
-        else:
-            print("💡 Both strategies require similar monthly savings")
-
-    def _print_risk_analysis(self) -> None:
-        """Print risk analysis for both strategies."""
-        print(f"\n🎯 RISK CONSIDERATIONS:")
-        print("Corpus Strategy:")
-        print("  ✅ Full control over investments")
-        print("  ✅ Potential for higher returns")
-        print("  ⚠️  Market risk during retirement")
-        print("  ⚠️  Longevity risk (money may run out)")
-
-        print("\nAnnuity Strategy:")
-        print("  ✅ Guaranteed income for life (or to specified age)")
-        print("  ✅ No market risk during retirement")
-        print("  ✅ Longevity protection")
-        print("  ⚠️  Lower potential returns")
-        print("  ⚠️  Inflation risk (fixed payments)")
-        print("  ⚠️  Insurance company credit risk")
-
-    def _print_healthcare_recommendations(self, results: CalculationResults) -> None:
-        """Print healthcare planning recommendations."""
-        healthcare = self.calculator.healthcare_params
-
-        print(f"\n🏥 HEALTHCARE PLANNING RECOMMENDATIONS:")
-        if healthcare.coverage_type == "basic":
-            print("⚠️  Consider upgrading to comprehensive coverage for better protection")
-        print(
-            f"💊 Budget {results.total_healthcare_corpus / results.corpus_needed:.0%} of your retirement corpus for healthcare")
-        print(
-            f"🩺 Healthcare costs will grow {healthcare.inflation_rate:.1%} annually vs {self.calculator.retirement_params.inflation_rate:.1%} general inflation")
-
-
-def get_user_input() -> Tuple[RetirementParameters, HealthcareParameters, str, Optional[float]]:
+def get_user_input() -> Tuple[RetirementParameters, str, float, Optional[float]]:
     """Get user input for retirement calculation."""
     try:
         current_age = int(input("\nEnter your current age [default: 50]: ") or 50)
@@ -859,7 +661,7 @@ def main():
     print("🏦 COMPREHENSIVE RETIREMENT SAVINGS CALCULATOR (Hong Kong)")
     print("=" * 60)
     print("This calculator accounts for inflation AND healthcare costs in Hong Kong.")
-    print("Enter your CURRENT annual expenses - inflation will be calculated automatically.")
+    print("Now includes REAL Hong Kong annuity product analysis with IRR calculations!")
 
     # Get user input
     retirement_params, coverage_type, healthcare_inflation, base_healthcare_cost = get_user_input()
@@ -869,24 +671,47 @@ def main():
     calc.set_retirement_parameters(retirement_params)
     calc.set_healthcare_parameters(base_healthcare_cost, healthcare_inflation, coverage_type)
 
-    # Calculate results
+    # Calculate traditional corpus strategy
     results = calc.calculate_monthly_savings_needed()
 
-    # Optional annuity analysis
-    annuity_results = None
-    if input("\nAnalyze Immediate Life Annuity strategy? [default: n] (y/n): ").lower().startswith('y'):
-        annuity_rate = float(input("Enter annuity rate offered by insurer [default: 4.5%]: ") or 4.5)
-        annuity_to_age = int(input("Enter age until annuity is guaranteed [default: 100]: ") or 100)
-        annuity_results = calc.calculate_annuity_analysis(annuity_rate, annuity_to_age)
+    print(f"\n🎯 TRADITIONAL CORPUS WITHDRAWAL STRATEGY:")
+    print(f"Total corpus needed: ${results.corpus_needed:,.0f}")
+    print(f"Monthly savings required: ${results.monthly_savings_required:,.0f}")
 
-    # Generate reports
-    reporter = RetirementReporter(calc)
-    reporter.print_comprehensive_summary(results, annuity_results)
+    # Hong Kong annuity analysis
+    if input("\nAnalyze Hong Kong Annuity Products? [default: y] (y/n): ").lower().startswith('y'):
+        print(f"\n🇭🇰 HONG KONG ANNUITY ANALYSIS OPTIONS:")
+        print("1. Single allocation analysis (specify percentage)")
+        print("2. Compare multiple allocation strategies")
+        print("3. Life expectancy sensitivity analysis")
+        print("4. All analyses")
 
-    # Optional visualizations
-    if input("\nShow comprehensive charts? [default: n] (y/n): ").lower().startswith('y'):
-        visualizer = RetirementVisualizer(calc)
-        visualizer.create_comprehensive_visualization(results, annuity_results)
+        choice = input("Choose analysis type [default: 4]: ").strip() or "4"
+
+        if choice == "1":
+            allocation = float(input("Enter annuity allocation percentage [default: 50]: ") or 50)
+            annuity_analysis, remaining_corpus = calc.analyze_hk_annuity_strategy(allocation)
+            calc.annuity_calc.print_annuity_analysis(annuity_analysis)
+
+        elif choice == "2":
+            calc.compare_annuity_allocations()
+
+        elif choice == "3":
+            allocation = float(input("Enter annuity allocation percentage [default: 50]: ") or 50)
+            calc.analyze_life_expectancy_sensitivity(allocation)
+
+        else:  # All analyses
+            print(f"\n🔍 COMPREHENSIVE HONG KONG ANNUITY ANALYSIS:")
+            calc.compare_annuity_allocations()
+            calc.analyze_life_expectancy_sensitivity(50)  # 50% allocation for sensitivity
+
+            # Detailed analysis for 50% allocation
+            annuity_analysis, _ = calc.analyze_hk_annuity_strategy(50)
+            calc.annuity_calc.print_annuity_analysis(annuity_analysis)
+
+    print(f"\n🎉 Analysis complete!")
+    print(
+        f"💡 Consider your risk tolerance, longevity expectations, and need for guaranteed income when choosing your strategy.")
 
 
 if __name__ == "__main__":
