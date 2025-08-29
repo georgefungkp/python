@@ -673,15 +673,15 @@ def get_user_input():
     # Basic demographic and timeline information
     print("\n📋 BASIC RETIREMENT INFORMATION:")
     current_age = int(input("Enter your current age: "))
-    retirement_age = int(input("Enter your planned retirement age (default 65): ") or "65")
+    retirement_age = int(input("Enter your planned retirement age (default 60): ") or "60")
     life_expectancy = int(input("Enter your life expectancy (default 85): ") or "85")
     current_annual_expense = float(input("Enter your current annual expenses: $"))
-    current_savings = float(input("Enter your current retirement savings (default 0): $") or "0")
+    current_savings = float(input("Enter your current retirement savings (default 5,000,000): $") or "5000000")
 
     # Investment return assumptions
     print("\n💼 INVESTMENT ASSUMPTIONS:")
     pre_retirement_return = float(
-        input("Expected annual return before retirement (default 8%): ").replace('%', '') or "8") / 100
+        input("Expected annual return before retirement (default 7%): ").replace('%', '') or "7") / 100
     post_retirement_return = float(
         input("Expected annual return during retirement (default 4%): ").replace('%', '') or "4") / 100
     inflation_rate = float(input("Expected inflation rate (default 3%): ").replace('%', '') or "3") / 100
@@ -703,12 +703,14 @@ def get_user_input():
 
     healthcare_params = {}
     if include_healthcare:
+        # Updated with realistic Hong Kong healthcare costs based on official Health Bureau data
         coverage_map = {
-            "1": (HealthcareCoverage.BASIC, 30000),
-            "2": (HealthcareCoverage.MODERATE, 50000),
-            "3": (HealthcareCoverage.COMPREHENSIVE, 80000)
+            "1": (HealthcareCoverage.BASIC, 20000),        # HK$20,000 - Basic/Public system (below average)
+            "2": (HealthcareCoverage.MODERATE, 30000),     # HK$30,000 - Average private coverage (close to per capita average)
+            "3": (HealthcareCoverage.COMPREHENSIVE, 45000) # HK$45,000 - Premium private coverage (above average)
         }
-        coverage_choice = input("Healthcare coverage (1=Basic, 2=Moderate, 3=Comprehensive, default 2): ") or "2"
+
+        coverage_choice = input("Healthcare coverage (1=Basic, 2=Moderate, 3=Comprehensive, default 3): ") or "3"
         coverage_type, base_cost = coverage_map.get(coverage_choice, (HealthcareCoverage.MODERATE, 50000))
         healthcare_inflation = float(input("Healthcare inflation rate (default 5%): ").replace('%', '') or "5") / 100
         healthcare_params = {
