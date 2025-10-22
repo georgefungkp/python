@@ -146,8 +146,7 @@ class IBKRPriceFetcher:
         
         # Check sections for exchange match
         sections = contract.get('sections', [])
-        if sections:
-            section = sections[0]
+        for section in sections:
             section_exchange = str(section.get('exchange', ''))
             if exchange in section_exchange:
                 score += 20

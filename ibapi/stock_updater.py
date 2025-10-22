@@ -305,6 +305,11 @@ def update_asset_allocation(file_path: str = "asset allocation.xlsx") -> None:
     # Load workbook
     try:
         wb = openpyxl.load_workbook(file_path)
+        # Set calculation properties
+        wb.calculation.calcMode = 'auto'
+        wb.calculation.fullCalcOnLoad = True
+        if "stock" in wb.sheetnames:
+            wb.active = wb["stock"]
         ws = wb.active
     except FileNotFoundError:
         print(f"❌ File not found: {file_path}")
@@ -423,7 +428,10 @@ def update_asset_allocation(file_path: str = "asset allocation.xlsx") -> None:
     # Save the workbook
     print("-" * 80)
     print(f"💾 Saving changes...")
-    
+
+    # Additionally, mark all sheets as needing recalculation
+    for sheet in wb.worksheets:
+        sheet.sheet_view.tabSelected = False
     try:
         wb.save(file_path)
         print(f"✅ File saved successfully!")

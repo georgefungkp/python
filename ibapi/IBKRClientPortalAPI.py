@@ -234,7 +234,7 @@ class IBKRClientPortalAPI:
         sec_type: str = "STK", 
         exchange: str = "SMART", 
         currency: str = "USD"
-    ) -> Optional[Dict]:
+    ) -> Optional[List[Dict]]:  # Fixed return type: List[Dict] instead of Dict
         """
         Search for a contract by symbol and get its contract ID (conid).
         
@@ -269,7 +269,12 @@ class IBKRClientPortalAPI:
         
         result = self._make_request('GET', '/iserver/secdef/search', params=params)
         
-        if result:
+        # Validate that result is a list (if not None)
+        if result is not None:
+            if not isinstance(result, list):
+                self.logger.error(f"Unexpected API response format for {symbol}: {type(result).__name__}")
+                self.logger.debug(f"Response content: {result}")
+                return None
             self.logger.info(f"Found {len(result)} contracts for {symbol}")
         
         return result
