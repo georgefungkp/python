@@ -4044,3 +4044,9 @@ java.net.SocketException: Connection reset
 -> GET /v1/api/tickle,200|336ms
 -> request: /v1/api/tickle
 -> GET /v1/api/tickle,200|343ms
+-> request: /v1/api/tickle
+-> GET /v1/api/tickle,200|1005ms
+-> request: /sso/ping
+-> GET /sso/ping,200|302ms
+-> request: /v1/api/tickle
+-> GET /v1/api/tickle,200|502ms
