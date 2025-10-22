@@ -8,14 +8,14 @@ tags = {
              "3": "Reject",
              "8": "Execution Report",
              "D": "New Order Single",
-             "E": "New Order - List",
-             "F": "Order Cancel Request",
-             "H": "Order Status Request",
+             # "E": "New Order - List",
+             # "F": "Order Cancel Request",
+             # "H": "Order Status Request",
          }
     },
     38: "OrderQty (Quantity ordered)",
     39: {
-        "name": "OrdStatus (Order status)",
+        "name": "OrderStatus (Order status)",
         "values": {
             "0": "New",
             "1": "Partially Filled",
@@ -26,7 +26,7 @@ tags = {
         }
     },
     40: {
-        "name": "OrdType (Order type)",
+        "name": "OrderType (Order type)",
         "values": {
             "1": "Market",
             "2": "Limit"
@@ -72,7 +72,6 @@ def quiz():
             #     print(f"  {val}: {desc}")
         else:
             print(f"Nope! It's {tag_data['name']}")
-
         # Bonus: Quiz on values
         val, val_desc = random.choice(list(tag_data['values'].items()))
         val_answer = input(f"What does value '{val}' mean in tag {tag_id}? ")

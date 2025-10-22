@@ -347,14 +347,10 @@ class HKMCAnnuityCalculator:
             # Entire premium qualifies for 25% income boost
             actual_annual_income = annual_income_needed * (1 + boost_percentage / 100)
 
-        # Validate against HKMC premium limits
+        # Only validate minimum premium - maximum should be handled at strategy level
         if total_premium < self.plan.minimum_premium:
             # Adjust to minimum premium and recalculate income
             total_premium = self.plan.minimum_premium
-            actual_annual_income = (total_premium / premium_per_unit) * annual_payout_per_unit
-        elif total_premium > self.plan.maximum_premium:
-            # Adjust to maximum premium and recalculate income
-            total_premium = self.plan.maximum_premium
             actual_annual_income = (total_premium / premium_per_unit) * annual_payout_per_unit
 
         # Calculate performance metrics
@@ -607,6 +603,24 @@ class RetirementCalculator:
             annuity_income_needed,
             self.retirement_params.life_expectancy
         )
+
+        # Validate annuity premium against maximum limit
+        max_premium = self.annuity_calc.plan.maximum_premium
+        if annuity_analysis.total_premium_needed > max_premium:
+            # Calculate maximum possible annuity income with the premium limit
+            max_annuity_income = (max_premium / annuity_analysis.premium_per_unit) * annuity_analysis.annual_payout_per_unit
+            max_annuity_percentage = (max_annuity_income / first_year_expense) * 100
+            
+            # Recalculate with the maximum allowable income
+            annuity_analysis = self.annuity_calc.calculate_annuity_requirements(
+                self.retirement_params.retirement_age,
+                max_annuity_income,
+                self.retirement_params.life_expectancy
+            )
+            
+            # Provide feedback about the adjustment
+            print(f"Warning: Requested annuity percentage ({annuity_percentage:.1f}%) exceeds maximum premium limit.")
+            print(f"Adjusted to maximum feasible: {max_annuity_percentage:.1f}% annuity coverage.")
 
         # STEP 2: Calculate self-investment portion
         # Determine remaining expenses after annuity income
