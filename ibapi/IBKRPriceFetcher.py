@@ -153,38 +153,63 @@ class IBKRPriceFetcher:
         
         return score
     
-    def get_conid(self, symbol: str, sec_type: str = "STK", 
-                  exchange: str = "SMART", currency: str = "USD",
-                  stock_name: str = None) -> Optional[str]:
-        """Get contract ID with intelligent matching."""
+    def get_conid(
+        self, 
+        symbol: str, 
+        sec_type: str = "STK", 
+        exchange: str = "SMART", 
+        currency: str = "USD",
+        stock_name: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Get IBKR contract ID (conid) for a security with caching.
         
-        cache_key = f"{symbol}_{sec_type}_{exchange}_{currency}"
+        Args:
+            symbol: Security symbol/ticker
+            sec_type: Security type (STK, BOND, etc.)
+            exchange: Exchange code
+            currency: Currency code
+            stock_name: Optional full security name for better matching
+            
+        Returns:
+            Contract ID (conid) as string, or None if not found
+        """
+        # Create cache key
+        cache_key = f"{symbol}|{sec_type}|{exchange}|{currency}"
+        
+        # Check cache first - avoid network call
         if cache_key in self.conid_cache:
             return self.conid_cache[cache_key]
         
+        # Authenticate only once per batch (not on every call)
+        if not hasattr(self, '_auth_checked'):
+            self.ensure_authenticated()
+            self._auth_checked = True
+        
+        # Search for contract
         contracts = self.api.search_contract(symbol, sec_type, exchange, currency)
-        if not contracts:
+        
+        if not contracts or len(contracts) == 0:
             self.api.logger.error(f"No contract found for {symbol}")
             return None
         
-        # Single contract - use it
+        # Select best contract
         if len(contracts) == 1:
             conid = str(contracts[0].get('conid'))
             self.api.logger.info(f"Single contract: {symbol} → {conid}")
-            self.conid_cache[cache_key] = conid
-            return conid
+        else:
+            # Score and rank contracts
+            scored = [(c, self._score_contract(c, symbol, exchange, currency, stock_name)) 
+                     for c in contracts]
+            best = max(scored, key=lambda x: x[1])
+            conid = str(best[0].get('conid'))
+            
+            desc = best[0].get('description', best[0].get('companyName', 'N/A'))
+            self.api.logger.info(
+                f"Best match: {symbol} → {conid} ({desc[:30]}, score: {best[1]})"
+            )
         
-        # Multiple contracts - find best match
-        best = max(contracts, key=lambda c: self._score_contract(
-            c, symbol, exchange, currency, stock_name
-        ))
-        conid = str(best.get('conid'))
-        score = self._score_contract(best, symbol, exchange, currency, stock_name)
-        company = best.get('companyName', 'N/A')
-        
-        self.api.logger.info(
-            f"Best match: {symbol} → {conid} ({company[:30]}, score: {score})"
-        )
+        # Cache the result
         self.conid_cache[cache_key] = conid
         return conid
     

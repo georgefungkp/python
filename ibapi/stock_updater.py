@@ -485,23 +485,63 @@ def batch_update_prices(ws, symbols_to_update: List[Tuple[int, str, Optional[str
     # Process in batches
     for i in range(0, len(symbols_to_update), batch_size):
         batch = symbols_to_update[i:i + batch_size]
-        batch_symbols = []
-        batch_info = {}  # symbol -> (row, stock_name, sec_type, exchange, currency)
+        batch_num = i // batch_size + 1
         
-        # Prepare batch
+        print(f"   Batch {batch_num}: {', '.join([s[1] for s in batch])[:60]}...")
+        
+        # Phase 1: Bulk contract lookup with caching
+        conid_map = {}  # symbol -> (conid, row, stock_name, sec_type, exchange, currency)
+        
         for row, symbol, stock_name in batch:
             sec_type, exchange, currency = detect_market_info(symbol)
-            batch_symbols.append(symbol)
-            batch_info[symbol] = (row, stock_name, sec_type, exchange, currency)
+            
+            # Try to get conid (this should use caching in IBKRPriceFetcher)
+            conid = ctx.fetcher.get_conid(symbol, sec_type, exchange, currency, stock_name)
+            
+            if conid:
+                conid_map[symbol] = (conid, row, stock_name, sec_type, exchange, currency)
         
-        # Batch fetch prices (this is where we save network time!)
-        print(f"   Batch {i//batch_size + 1}: {', '.join(batch_symbols)[:60]}...")
+        # Phase 2: Bulk market data fetch (if we have valid conids)
+        if conid_map:
+            conids_list = [info[0] for info in conid_map.values()]
+            
+            # Make a SINGLE API call for all contracts in this batch
+            market_data = ctx.api.get_market_data_snapshot(conids_list, fields=["31"])
+            
+            if market_data:
+                # Map responses back to symbols
+                for data_item in market_data:
+                    conid_str = str(data_item.get('conid', ''))
+                    
+                    # Find which symbol this conid belongs to
+                    for symbol, (conid, row, stock_name, sec_type, exchange, currency) in conid_map.items():
+                        if conid == conid_str:
+                            # Extract price
+                            last_price = data_item.get('31')  # Field 31 = Last Price
+                            
+                            if last_price is not None:
+                                price = clean_price(last_price)
+                                ws.cell(row, ctx.columns.price).value = price
+                                print(f"  ✅ {symbol}: {currency} {price:.2f}")
+                                ctx.stats.price_updated += 1
+                            else:
+                                print(f"  ❌ {symbol}: No price data")
+                                ctx.stats.price_failed += 1
+                                ctx.errors.no_market_data.append(
+                                    ErrorRecord(row, symbol, stock_name, f"{exchange}/{currency}")
+                                )
+                            break
         
-        # Process each symbol (can be further optimized if API supports bulk contract lookup)
-        for symbol in batch_symbols:
-            row, stock_name, sec_type, exchange, currency = batch_info[symbol]
-            update_price(ws, row, ctx.columns.price, symbol, stock_name,
-                        ctx.fetcher, ctx.stats, ctx.errors)
+        # Handle symbols where conid lookup failed
+        for row, symbol, stock_name in batch:
+            if symbol not in conid_map:
+                sec_type, exchange, currency = detect_market_info(symbol)
+                print(f"  ❌ {symbol}: Contract not found")
+                ctx.stats.price_failed += 1
+                ctx.errors.contract_not_found.append(
+                    ErrorRecord(row, symbol, stock_name, f"{exchange}/{currency}", 
+                               "Failed to resolve contract ID")
+                )
 
 
 def process_tables(ws, tables: List[Tuple[int, int]], ctx: AppContext):
@@ -539,9 +579,9 @@ def process_tables(ws, tables: List[Tuple[int, int]], ctx: AppContext):
             
             print()
     
-    # Batch update all prices (much faster!)
+    # Batch update all prices (MUCH faster with bulk API calls!)
     if ctx.columns.price and symbols_for_batch_price_update:
-        batch_update_prices(ws, symbols_for_batch_price_update, ctx, batch_size=10)
+        batch_update_prices(ws, symbols_for_batch_price_update, ctx, batch_size=20)  # Increased to 20
 
 
 def save_workbook(wb, file_path: str) -> bool:
