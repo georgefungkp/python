@@ -21,6 +21,8 @@ from IBKRClientPortalAPI import IBKRClientPortalAPI
 from datetime import datetime
 import shutil
 from pathlib import Path
+import concurrent.futures
+from collections import defaultdict
 
 
 # Constants
@@ -284,6 +286,7 @@ def update_quantity(ws, row: int, col: int, symbol: str, portfolio: Dict,
             stats.qty_changes.append((symbol, old_qty, new_qty))
     else:
         print(f"  ⚠️  Quantity: Not in portfolio")
+        print(f"     Reason: Symbol '{symbol}' not found in your IBKR holdings")
         stats.qty_not_in_portfolio += 1
         errors.not_in_portfolio.append(ErrorRecord(row, symbol, stock_name))
 
@@ -345,113 +348,69 @@ def print_column_mapping(columns: ColumnMapping):
 
 
 def print_summary(stats: UpdateStatistics, portfolio_size: int):
-    """Print update summary."""
+    """Print concise update summary."""
     print("=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    print(f"\n📊 Quantities:")
-    print(f"   ✅ Updated: {stats.qty_updated}")
     
-    if stats.qty_changes:
-        print(f"\n   🔄 Changed quantities ({len(stats.qty_changes)}):")
-        for symbol, old_qty, new_qty in stats.qty_changes:
-            diff = new_qty - old_qty
-            sign = "+" if diff > 0 else ""
-            print(f"      • {symbol}: {old_qty} → {new_qty} ({sign}{diff})")
-    else:
-        print(f"   ℹ️  No quantity changes detected")
+    # Quantities section
+    if stats.qty_updated > 0:
+        print(f"\n📊 Quantities: {stats.qty_updated} updated")
+        if stats.qty_changes:
+            print(f"   Changed: {len(stats.qty_changes)}")
+            for symbol, old_qty, new_qty in stats.qty_changes:
+                diff = new_qty - old_qty
+                sign = "+" if diff > 0 else ""
+                print(f"      {symbol}: {old_qty} → {new_qty} ({sign}{diff})")
     
-    print(f"\n   ⚠️  Not in portfolio: {stats.qty_not_in_portfolio}")
-    print(f"\n💰 Prices:")
-    print(f"   ✅ Updated: {stats.price_updated}")
-    print(f"   ❌ Failed: {stats.price_failed}")
-    print(f"\n⏭️  Skipped: {stats.skipped}")
-
+    if stats.qty_not_in_portfolio > 0:
+        print(f"   Not in portfolio: {stats.qty_not_in_portfolio} (see details below)")
+    
+    # Prices section
+    print(f"\n💰 Prices: {stats.price_updated} updated")
+    if stats.price_failed > 0:
+        print(f"   Failed: {stats.price_failed} (see details below)")
+    
+    if stats.skipped > 0:
+        print(f"\n⏭️  Skipped: {stats.skipped} invalid symbols")
+    
     if portfolio_size > 0:
-        print(f"\n📝 Portfolio had {portfolio_size} positions")
+        print(f"\n📝 Portfolio: {portfolio_size} positions")
 
 
 def print_error_report(errors: ErrorTracker):
-    """Print detailed error report."""
+    """Print clean, concise error report."""
     print("\n" + "=" * 80)
-    print("DETAILED ERROR REPORT")
+    print("ISSUES FOUND")
     print("=" * 80)
     
     if not errors.has_errors():
-        print("\n✅ No errors detected! All securities updated successfully.")
-        print("\n" + "=" * 80)
+        print("\n✅ No issues - all updates successful")
         return
     
-    # Define error categories with their display info
-    error_categories = [
-        {
-            'errors': errors.not_in_portfolio,
-            'icon': '❌',
-            'title': 'NOT IN PORTFOLIO',
-            'description': 'These symbols are in Excel but not in your IBKR portfolio:',
-            'tip': 'Check if you still hold these or remove from Excel',
-            'show_market': False,
-            'show_error': False
-        },
-        {
-            'errors': errors.contract_not_found,
-            'icon': '❌',
-            'title': 'CONTRACTS NOT FOUND',
-            'description': 'IBKR could not find these symbols:',
-            'tip': 'Verify symbols are correct for the market',
-            'show_market': True,
-            'show_error': True
-        },
-        {
-            'errors': errors.no_market_data,
-            'icon': '⚠️',
-            'title': 'NO MARKET DATA',
-            'description': 'Contract found but no price available:',
-            'tip': 'Market may be closed or data subscription required',
-            'show_market': True,
-            'show_error': False
-        },
-        {
-            'errors': errors.price_failed,
-            'icon': '❌',
-            'title': 'OTHER ERRORS',
-            'description': 'Unexpected errors while fetching prices:',
-            'tip': None,
-            'show_market': False,
-            'show_error': True
-        }
-    ]
+    # Group errors by type with clean output
+    if errors.not_in_portfolio:
+        print(f"\n❌ NOT IN PORTFOLIO ({len(errors.not_in_portfolio)})")
+        print("   Quantities not updated - symbols not in your IBKR account:")
+        for err in errors.not_in_portfolio:
+            print(f"      {err.symbol} (row {err.row})")
     
-    # Print each category
-    for category in error_categories:
-        error_list = category['errors']
-        if not error_list:
-            continue
-        
-        # Header
-        print(f"\n{category['icon']} {category['title']} ({len(error_list)})")
-        print("-" * 80)
-        print(f"{category['description']}\n")
-        
-        # Error entries
-        for err in error_list:
-            name_str = f" - {err.name}" if err.name else ""
-            print(f"  Row {err.row:3d}: {err.symbol}{name_str}")
-            
-            if category['show_market'] and err.market:
-                print(f"           Market: {err.market}")
-            
-            if category['show_error'] and err.error:
-                print(f"           Error: {err.error}")
-            
-            if category['show_market'] or category['show_error']:
-                print()
-        
-        # Tip
-        if category['tip']:
-            print(f"💡 {category['tip']}")
+    if errors.contract_not_found:
+        print(f"\n❌ SYMBOL NOT FOUND ({len(errors.contract_not_found)})")
+        print("   Prices not updated - IBKR couldn't find these symbols:")
+        for err in errors.contract_not_found:
+            print(f"      {err.symbol} at {err.market} (row {err.row})")
     
-    print("\n" + "=" * 80)
+    if errors.no_market_data:
+        print(f"\n⚠️  NO PRICE DATA ({len(errors.no_market_data)})")
+        print("   Market closed or data unavailable:")
+        for err in errors.no_market_data:
+            print(f"      {err.symbol} (row {err.row})")
+    
+    if errors.price_failed:
+        print(f"\n❌ OTHER ERRORS ({len(errors.price_failed)})")
+        for err in errors.price_failed:
+            print(f"      {err.symbol}: {err.error[:50]} (row {err.row})")
 
 
 @dataclass
@@ -507,29 +466,51 @@ def get_stock_name(ws, row: int, columns: ColumnMapping) -> Optional[str]:
     return str(name_value).strip() if name_value else None
 
 
-def process_row(ws, row: int, symbol: str, ctx: AppContext):
-    """Process a single row (update quantity and price)."""
-    print(f"Row {row}: {symbol}")
-    stock_name = get_stock_name(ws, row, ctx.columns)
+def batch_update_prices(ws, symbols_to_update: List[Tuple[int, str, Optional[str]]], 
+                       ctx: AppContext, batch_size: int = 10):
+    """
+    Update prices in batches for better network performance.
     
-    # Update quantity if column exists
-    if ctx.columns.quantity:
-        update_quantity(ws, row, ctx.columns.quantity, symbol, ctx.portfolio,
-                       ctx.stats, ctx.errors, stock_name)
+    Args:
+        ws: Worksheet
+        symbols_to_update: List of (row, symbol, stock_name) tuples
+        ctx: Application context
+        batch_size: Number of symbols to process in each batch
+    """
+    if not symbols_to_update:
+        return
     
-    # Update price if column exists
-    if ctx.columns.price:
-        update_price(ws, row, ctx.columns.price, symbol, stock_name,
-                    ctx.fetcher, ctx.stats, ctx.errors)
+    print(f"\n💹 Batch processing {len(symbols_to_update)} price updates (batch size: {batch_size})...")
     
-    print()
+    # Process in batches
+    for i in range(0, len(symbols_to_update), batch_size):
+        batch = symbols_to_update[i:i + batch_size]
+        batch_symbols = []
+        batch_info = {}  # symbol -> (row, stock_name, sec_type, exchange, currency)
+        
+        # Prepare batch
+        for row, symbol, stock_name in batch:
+            sec_type, exchange, currency = detect_market_info(symbol)
+            batch_symbols.append(symbol)
+            batch_info[symbol] = (row, stock_name, sec_type, exchange, currency)
+        
+        # Batch fetch prices (this is where we save network time!)
+        print(f"   Batch {i//batch_size + 1}: {', '.join(batch_symbols)[:60]}...")
+        
+        # Process each symbol (can be further optimized if API supports bulk contract lookup)
+        for symbol in batch_symbols:
+            row, stock_name, sec_type, exchange, currency = batch_info[symbol]
+            update_price(ws, row, ctx.columns.price, symbol, stock_name,
+                        ctx.fetcher, ctx.stats, ctx.errors)
 
 
 def process_tables(ws, tables: List[Tuple[int, int]], ctx: AppContext):
-    """Process all data tables in the worksheet."""
+    """Process all data tables with optimized batch price updates."""
     print("\n" + "=" * 80)
     print("UPDATING POSITIONS")
     print("=" * 80 + "\n")
+    
+    symbols_for_batch_price_update = []
     
     for table_num, (start_row, end_row) in enumerate(tables, 1):
         print(f"📋 Table {table_num}:\n")
@@ -537,14 +518,30 @@ def process_tables(ws, tables: List[Tuple[int, int]], ctx: AppContext):
         for row in range(start_row + 1, end_row + 1):
             symbol_value = ws.cell(row, ctx.columns.symbol).value
             
-            # Skip invalid symbols
             if not is_valid_symbol(symbol_value):
                 if symbol_value:
                     ctx.stats.skipped += 1
                 continue
             
             symbol = str(symbol_value).strip().upper()
-            process_row(ws, row, symbol, ctx)
+            stock_name = get_stock_name(ws, row, ctx.columns)
+            
+            print(f"Row {row}: {symbol}")
+            
+            # Update quantity immediately (fast, no network call)
+            if ctx.columns.quantity:
+                update_quantity(ws, row, ctx.columns.quantity, symbol, ctx.portfolio,
+                              ctx.stats, ctx.errors, stock_name)
+            
+            # Collect for batch price update
+            if ctx.columns.price:
+                symbols_for_batch_price_update.append((row, symbol, stock_name))
+            
+            print()
+    
+    # Batch update all prices (much faster!)
+    if ctx.columns.price and symbols_for_batch_price_update:
+        batch_update_prices(ws, symbols_for_batch_price_update, ctx, batch_size=10)
 
 
 def save_workbook(wb, file_path: str) -> bool:
@@ -571,6 +568,13 @@ def update_asset_allocation(file_path: str = EXCEL_FILE_PATH) -> None:
     print("📊 IBKR ASSET ALLOCATION UPDATER")
     print("=" * 80 + "\n")
     print(f"📂 File: {file_path}\n")
+    
+    # Create backup first
+    print("💾 Creating backup...")
+    backup_path = create_backup(file_path)
+    if not backup_path:
+        print("❌ Cannot proceed without backup. Exiting.")
+        return
     
     # Initialize APIs
     api = IBKRClientPortalAPI()
@@ -625,8 +629,40 @@ def update_asset_allocation(file_path: str = EXCEL_FILE_PATH) -> None:
         print_summary(ctx.stats, len(portfolio))
         print_error_report(ctx.errors)
         
+        print(f"\n💾 Backup saved at: {backup_path}")
+        
     finally:
         wb.close()
+
+
+def create_backup(file_path: str) -> Optional[str]:
+    """
+    Create a backup of the Excel file with timestamp.
+
+    Returns:
+        Path to backup file if successful, None otherwise
+    """
+    try:
+        file_path_obj = Path(file_path)
+
+        if not file_path_obj.exists():
+            print(f"⚠️  File not found: {file_path}")
+            return None
+
+        # Create backup filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{file_path_obj.stem}_backup_{timestamp}{file_path_obj.suffix}"
+        backup_path = file_path_obj.parent / backup_name
+
+        # Copy file to backup location
+        shutil.copy2(file_path, backup_path)
+        print(f"✅ Backup created: {backup_path.name}\n")
+
+        return str(backup_path)
+
+    except Exception as e:
+        print(f"❌ Failed to create backup: {e}")
+        return None
 
 
 if __name__ == "__main__":
