@@ -408,3 +408,67 @@ class IBKRClientPortalAPI:
             params['exchange'] = exchange
             
         return self._make_request('GET', '/iserver/marketdata/history', params=params)
+    
+    def get_portfolio_accounts(self) -> Optional[List[Dict]]:
+        """
+        Get list of portfolio accounts.
+        
+        Returns information about all brokerage accounts linked to the session.
+        
+        Endpoint: GET /portfolio/accounts
+        
+        Returns:
+            List of account dictionaries with account IDs and metadata
+            None if request fails
+            
+        Example:
+            accounts = api.get_portfolio_accounts()
+            if accounts:
+                account_id = accounts[0]['accountId']
+        """
+        result = self._make_request('GET', '/portfolio/accounts')
+        
+        if result:
+            self.logger.info(f"Retrieved {len(result)} account(s)")
+        
+        return result
+    
+    def get_portfolio_positions(self, account_id: str) -> Optional[List[Dict]]:
+        """
+        Get all positions for a specific account.
+        
+        Returns detailed information about all open positions including
+        contract details, position size, market value, and P&L.
+        
+        Endpoint: GET /portfolio/{accountId}/positions/0
+        
+        Args:
+            account_id: Account identifier from get_portfolio_accounts()
+            
+        Returns:
+            List of position dictionaries with holdings information
+            None if request fails
+            
+        Position fields include:
+            - conid: Contract identifier
+            - contractDesc: Contract description
+            - position: Number of shares/contracts
+            - mktPrice: Current market price
+            - mktValue: Current market value
+            - currency: Position currency
+            - avgCost: Average cost basis
+            - avgPrice: Average purchase price
+            - unrealizedPnl: Unrealized profit/loss
+            - ticker: Ticker symbol (if available)
+            
+        Example:
+            positions = api.get_portfolio_positions("U1234567")
+            for pos in positions:
+                print(f"{pos['contractDesc']}: {pos['position']} @ ${pos['mktPrice']}")
+        """
+        result = self._make_request('GET', f'/portfolio/{account_id}/positions/0')
+        
+        if result:
+            self.logger.info(f"Retrieved {len(result)} position(s) for account {account_id}")
+        
+        return result
