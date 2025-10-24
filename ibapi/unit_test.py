@@ -9,6 +9,11 @@ from typing import List, Tuple, Optional
 
 def display_contract_details(contract: dict, index: int = None):
     """Display detailed information about a contract."""
+    # Validate that contract is actually a dictionary
+    if not isinstance(contract, dict):
+        print(f"  ⚠️  Error: Expected dictionary but got {type(contract).__name__}: {contract}")
+        return
+    
     prefix = f"Contract {index}: " if index else ""
 
     print(f"{prefix}")
@@ -23,7 +28,7 @@ def display_contract_details(contract: dict, index: int = None):
     print()
 
 
-def display_market_data(data: dict, currency: str = "USD"):
+def display_market_data(data: dict, currency: str = "USD", contract: dict = None):
     """Display market data fields."""
     field_names = {
         '31': 'Last Price',
@@ -37,6 +42,16 @@ def display_market_data(data: dict, currency: str = "USD"):
         '72': 'Close',
         '73': 'Open'
     }
+
+    # Display contract identification info if available
+    if contract:
+        print("  Contract Info:")
+        print(f"    Symbol: {contract.get('symbol', 'N/A')}")
+        print(f"    Name: {contract.get('companyName') or contract.get('description', 'N/A')}")
+        print(f"    Exchange: {contract.get('exchange', 'N/A')}")
+        print(f"    Currency: {contract.get('currency', 'N/A')}")
+        print(f"    Conid: {contract.get('conid', data.get('conid', 'N/A'))}")
+        print()
 
     print("  Available fields:")
     for field_id, field_value in data.items():
@@ -69,9 +84,19 @@ def search_and_display_contracts(api: IBKRClientPortalAPI, symbol: str,
         print(f"❌ No contracts found for {symbol}")
         return None
 
+    # Validate that contracts is a list
+    if not isinstance(contracts, list):
+        print(f"❌ Unexpected response format. Expected list but got {type(contracts).__name__}")
+        print(f"   Response: {contracts}")
+        return None
+
     print(f"✅ Found {len(contracts)} contract(s):\n")
 
     for i, contract in enumerate(contracts, 1):
+        # Additional validation for each contract item
+        if not isinstance(contract, dict):
+            print(f"Contract {i}: ⚠️  Invalid format (expected dict, got {type(contract).__name__}): {contract}\n")
+            continue
         display_contract_details(contract, i)
 
     return contracts
@@ -91,7 +116,7 @@ def fetch_and_display_prices(api: IBKRClientPortalAPI, contracts: List[dict], cu
         market_data = api.get_market_data_snapshot([conid])
 
         if market_data and len(market_data) > 0:
-            display_market_data(market_data[0], currency)
+            display_market_data(market_data[0], currency, contract)
         else:
             print("  ❌ No market data received")
 
@@ -236,12 +261,21 @@ def test_with_fetcher(symbol: str, sec_type: str = "STK",
 
 if __name__ == "__main__":
     # Test individual stock
-    test_security("VTIP", "STK", "SMART", "USD")
+    # test_security("BRK.B", "STK", "NYSE", "USD")
+    # test_security("BRK-B", "STK", "NYSE", "USD")
+    # test_security("BRK", "STK", "NYSE", "USD")
+    test_security("3033", "STK", "SEHK", "HKD")
+    test_security("PTLC", "STK", "SMART", "USD")
+    test_security("2806", "STK", "SEHK", "HKD")
+    test_security("2807", "STK", "SEHK", "HKD")
+    test_security("3439", "STK", "SEHK", "HKD")
+    test_security("ARKQ", "STK", "SEHK", "HKD")
+    test_security("GLD", "STK", "SEHK", "HKD")
 
     print("\n\n")
 
     # Test bond with ISIN
-    test_security("US91282CJV46", "BOND", "SMART", "USD")
+    # test_security("US91282CJV46", "BOND", "SMART", "USD")
 
     print("\n\n")
 
