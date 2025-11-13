@@ -21,13 +21,12 @@ from IBKRClientPortalAPI import IBKRClientPortalAPI
 from datetime import datetime
 import shutil
 from pathlib import Path
-import concurrent.futures
-from collections import defaultdict
+import re
 
 
 # Constants
 EXCEL_FILE_PATH = r"C:\Users\George\Documents\asset allocation.xlsx"
-DEFAULT_SHEET_NAME = "stock"
+DEFAULT_SHEET_NAME = "Stock"
 MAX_HEADER_SEARCH_ROWS = 20
 MAX_END_MARKER_SEARCH_COLS = 15
 
@@ -57,6 +56,7 @@ class UpdateStatistics:
     price_failed: int = 0
     skipped: int = 0
     qty_changes: List[Tuple[str, float, float]] = field(default_factory=list)
+    symbols_in_excel: set = field(default_factory=set)  # Track symbols we found in Excel
 
 
 @dataclass
@@ -183,6 +183,10 @@ def find_header_columns(ws, max_rows: int = MAX_HEADER_SEARCH_ROWS) -> ColumnMap
 
 def find_data_tables(ws, symbol_col: int) -> List[Tuple[int, int]]:
     """Find all data tables in the worksheet."""
+    # Validate symbol_col is not None
+    if symbol_col is None:
+        raise ValueError("symbol_col cannot be None. The symbol column (編號) is required but was not found.")
+    
     tables = []
     current_start = None
 
@@ -208,6 +212,33 @@ def find_data_tables(ws, symbol_col: int) -> List[Tuple[int, int]]:
             current_start = None
 
     return tables
+
+
+def normalize_symbol(symbol: str) -> str:
+    """
+    Normalize symbol for portfolio matching.
+
+    Handles variations like:
+    - "BRK.B" → "BRK B" (dots to spaces)
+    - "US-T 31/01/26" → "US-T" (remove date suffixes)
+    - Strips whitespace and converts to uppercase
+    """
+    if not symbol:
+        return ""
+
+    normalized = str(symbol).strip().upper()
+
+    # Replace dots with spaces (BRK.B → BRK B)
+    normalized = normalized.replace('.', ' ')
+
+    # Remove date suffixes for bonds (e.g., "US-T 31/01/26" → "US-T")
+    # Match patterns like: "31/01/26", "01/31/26", "2026-01-31", etc.
+    import re
+    # Remove common date patterns at the end
+    normalized = re.sub(r'\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$', '', normalized)
+    normalized = re.sub(r'\s+\d{4}[/-]\d{1,2}[/-]\d{1,2}$', '', normalized)
+
+    return normalized.strip()
 
 
 def clean_price(value) -> Optional[float]:
@@ -258,13 +289,17 @@ def fetch_portfolio(api: IBKRClientPortalAPI) -> Dict[str, Dict]:
     for pos in positions:
         ticker = pos.get('ticker', '').strip().upper() if pos.get('ticker') else ''
         if ticker:
-            portfolio[ticker] = {
+            # Store with normalized key for better matching
+            normalized_ticker = normalize_symbol(ticker)
+
+            portfolio[normalize_symbol(ticker)] = {
                 'quantity': pos.get('position', 0),
                 'conid': str(pos.get('conid', '')),
                 'currency': pos.get('currency', 'USD'),
-                'description': pos.get('contractDesc', '')
+                'description': pos.get('contractDesc', ''),
+                'original_ticker': ticker  # Keep original for display
             }
-            print(f"  • {ticker}: {portfolio[ticker]['quantity']} shares")
+            print(f"  • {ticker}: {portfolio[normalized_ticker]['quantity']} shares")
 
     print()
     return portfolio
@@ -273,9 +308,12 @@ def fetch_portfolio(api: IBKRClientPortalAPI) -> Dict[str, Dict]:
 def update_quantity(ws, row: int, col: int, symbol: str, portfolio: Dict,
                     stats: UpdateStatistics, errors: ErrorTracker, stock_name: Optional[str]):
     """Update quantity for a single security."""
-    if symbol in portfolio:
+    # Normalize symbol for portfolio lookup
+    normalized_symbol = normalize_symbol(symbol)
+    
+    if normalized_symbol in portfolio:
         old_qty = ws.cell(row, col).value or 0
-        new_qty = portfolio[symbol]['quantity']
+        new_qty = portfolio[normalized_symbol]['quantity']
         
         ws.cell(row, col).value = new_qty
         print(f"  ✅ Quantity: {new_qty}")
@@ -286,7 +324,7 @@ def update_quantity(ws, row: int, col: int, symbol: str, portfolio: Dict,
             stats.qty_changes.append((symbol, old_qty, new_qty))
     else:
         print(f"  ⚠️  Quantity: Not in portfolio")
-        print(f"     Reason: Symbol '{symbol}' not found in your IBKR holdings")
+        print(f"     Reason: Symbol '{symbol}' (normalized: '{normalized_symbol}') not found in your IBKR holdings")
         stats.qty_not_in_portfolio += 1
         errors.not_in_portfolio.append(ErrorRecord(row, symbol, stock_name))
 
@@ -347,7 +385,7 @@ def print_column_mapping(columns: ColumnMapping):
         print(f"✅ {HEADER_NAME}: Column {columns.name}")
 
 
-def print_summary(stats: UpdateStatistics, portfolio_size: int):
+def print_summary(stats: UpdateStatistics, portfolio: Dict[str, Dict]):
     """Print concise update summary."""
     print("=" * 80)
     print("SUMMARY")
@@ -374,8 +412,25 @@ def print_summary(stats: UpdateStatistics, portfolio_size: int):
     if stats.skipped > 0:
         print(f"\n⏭️  Skipped: {stats.skipped} invalid symbols")
     
-    if portfolio_size > 0:
-        print(f"\n📝 Portfolio: {portfolio_size} positions")
+    # Portfolio analysis
+    if portfolio:
+        print(f"\n📝 Portfolio: {len(portfolio)} positions")
+        
+        # Find positions not in Excel
+        missing_in_excel = []
+        for normalized_symbol, position_data in portfolio.items():
+            if normalized_symbol not in stats.symbols_in_excel:
+                original_ticker = position_data.get('original_ticker', normalized_symbol)
+                quantity = position_data.get('quantity', 0)
+                missing_in_excel.append((original_ticker, quantity))
+        
+        if missing_in_excel:
+            print(f"\n⚠️  Positions NOT in Excel: {len(missing_in_excel)}")
+            print("   The following positions are in your IBKR portfolio but not found in Excel:")
+            for ticker, qty in sorted(missing_in_excel):
+                print(f"      {ticker}: {qty} shares")
+        else:
+            print("   ✅ All portfolio positions are in Excel")
 
 
 def print_error_report(errors: ErrorTracker):
@@ -490,16 +545,30 @@ def batch_update_prices(ws, symbols_to_update: List[Tuple[int, str, Optional[str
         print(f"   Batch {batch_num}: {', '.join([s[1] for s in batch])[:60]}...")
         
         # Phase 1: Bulk contract lookup with caching
-        conid_map = {}  # symbol -> (conid, row, stock_name, sec_type, exchange, currency)
+        conid_map = {}  # symbol -> (conid, row, stock_name, sec_type, exchange, currency, normalized_symbol)
         
         for row, symbol, stock_name in batch:
-            sec_type, exchange, currency = detect_market_info(symbol)
+            # Normalize symbol for IBKR API lookup and portfolio lookup
+            normalized_symbol = normalize_symbol(symbol)
             
-            # Try to get conid (this should use caching in IBKRPriceFetcher)
-            conid = ctx.fetcher.get_conid(symbol, sec_type, exchange, currency, stock_name)
+            # First, try to get conid from portfolio (more reliable)
+            conid = None
+            if normalized_symbol in ctx.portfolio:
+                conid = ctx.portfolio[normalized_symbol].get('conid')
+                if conid:
+                    # Use portfolio conid - most reliable
+                    sec_type = "STK"  # Most portfolio items are stocks
+                    exchange = "SMART"
+                    currency = ctx.portfolio[normalized_symbol].get('currency', 'USD')
+                    conid_map[symbol] = (conid, row, stock_name, sec_type, exchange, currency, normalized_symbol)
+                    continue
+            
+            # If not in portfolio, search for contract
+            sec_type, exchange, currency = detect_market_info(normalized_symbol)
+            conid = ctx.fetcher.get_conid(normalized_symbol, sec_type, exchange, currency, stock_name)
             
             if conid:
-                conid_map[symbol] = (conid, row, stock_name, sec_type, exchange, currency)
+                conid_map[symbol] = (conid, row, stock_name, sec_type, exchange, currency, normalized_symbol)
         
         # Phase 2: Bulk market data fetch (if we have valid conids)
         if conid_map:
@@ -514,7 +583,7 @@ def batch_update_prices(ws, symbols_to_update: List[Tuple[int, str, Optional[str
                     conid_str = str(data_item.get('conid', ''))
                     
                     # Find which symbol this conid belongs to
-                    for symbol, (conid, row, stock_name, sec_type, exchange, currency) in conid_map.items():
+                    for symbol, (conid, row, stock_name, sec_type, exchange, currency, normalized) in conid_map.items():
                         if conid == conid_str:
                             # Extract price
                             last_price = data_item.get('31')  # Field 31 = Last Price
@@ -522,7 +591,10 @@ def batch_update_prices(ws, symbols_to_update: List[Tuple[int, str, Optional[str
                             if last_price is not None:
                                 price = clean_price(last_price)
                                 ws.cell(row, ctx.columns.price).value = price
-                                print(f"  ✅ {symbol}: {currency} {price:.2f}")
+                                if normalized != symbol:
+                                    print(f"  ✅ {symbol} ({normalized}): {currency} {price:.2f}")
+                                else:
+                                    print(f"  ✅ {symbol}: {currency} {price:.2f}")
                                 ctx.stats.price_updated += 1
                             else:
                                 print(f"  ❌ {symbol}: No price data")
@@ -535,8 +607,12 @@ def batch_update_prices(ws, symbols_to_update: List[Tuple[int, str, Optional[str
         # Handle symbols where conid lookup failed
         for row, symbol, stock_name in batch:
             if symbol not in conid_map:
-                sec_type, exchange, currency = detect_market_info(symbol)
-                print(f"  ❌ {symbol}: Contract not found")
+                normalized_symbol = normalize_symbol(symbol)
+                sec_type, exchange, currency = detect_market_info(normalized_symbol)
+                if normalized_symbol != symbol:
+                    print(f"  ❌ {symbol} ({normalized_symbol}): Contract not found")
+                else:
+                    print(f"  ❌ {symbol}: Contract not found")
                 ctx.stats.price_failed += 1
                 ctx.errors.contract_not_found.append(
                     ErrorRecord(row, symbol, stock_name, f"{exchange}/{currency}", 
@@ -565,6 +641,10 @@ def process_tables(ws, tables: List[Tuple[int, int]], ctx: AppContext):
             
             symbol = str(symbol_value).strip().upper()
             stock_name = get_stock_name(ws, row, ctx.columns)
+            
+            # Track this symbol as being in Excel (use normalized form)
+            normalized_symbol = normalize_symbol(symbol)
+            ctx.stats.symbols_in_excel.add(normalized_symbol)
             
             print(f"Row {row}: {symbol}")
             
@@ -637,6 +717,32 @@ def update_asset_allocation(file_path: str = EXCEL_FILE_PATH) -> None:
     try:
         # Find structure
         columns = find_header_columns(ws)
+        
+        # Validate ALL required columns are found
+        missing_columns = []
+        if columns.symbol is None:
+            missing_columns.append(HEADER_SYMBOL)
+        if columns.quantity is None:
+            missing_columns.append(HEADER_QUANTITY)
+        if columns.price is None:
+            missing_columns.append(HEADER_PRICE)
+        
+        if missing_columns:
+            print("\n" + "=" * 80)
+            print("❌ CRITICAL ERROR: Required columns not found")
+            print("=" * 80)
+            print(f"\nThe following required columns are missing from your Excel file:")
+            for col_name in missing_columns:
+                print(f"   ❌ {col_name}")
+            print("\n💡 Please verify:")
+            print(f"   1. Your Excel file has a header row with all required columns")
+            print(f"   2. The headers are in the first {MAX_HEADER_SEARCH_ROWS} rows")
+            print("   3. The column names are spelled correctly (including Chinese characters)")
+            print(f"\n📋 Required columns: {HEADER_SYMBOL}, {HEADER_QUANTITY}, {HEADER_PRICE}")
+            print("\n❌ Update aborted.\n")
+            return
+        
+        # All columns found - print mapping
         print_column_mapping(columns)
         
         tables = find_data_tables(ws, columns.symbol)
@@ -666,7 +772,7 @@ def update_asset_allocation(file_path: str = EXCEL_FILE_PATH) -> None:
         save_workbook(wb, file_path)
         
         # Print reports
-        print_summary(ctx.stats, len(portfolio))
+        print_summary(ctx.stats, portfolio)
         print_error_report(ctx.errors)
         
         print(f"\n💾 Backup saved at: {backup_path}")
