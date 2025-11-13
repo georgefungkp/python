@@ -1,8 +1,8 @@
 @echo off
 
 rem example setting a JAVA_HOME and adding to PATH
-#set JAVA_HOME=c:\jdk
-#set PATH=%JAVA_HOME%\bin;%PATH%
+rem set JAVA_HOME=c:\jdk
+rem PATH=%JAVA_HOME%\bin;%PATH%
 
 if exist %1 goto FOUND_CONF
 echo "usage: %0 /path/to/conf.yaml"

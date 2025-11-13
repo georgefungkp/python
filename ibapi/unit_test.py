@@ -260,22 +260,31 @@ def test_with_fetcher(symbol: str, sec_type: str = "STK",
 
 
 if __name__ == "__main__":
+    # Test bond with date suffix (as it appears in Excel)
+    print("\n" + "=" * 80)
+    print("Testing Bond with Date Suffix: US-T 31/01/26")
+    print("=" * 80)
+
+    # First, test the normalized symbol
+    # test_security("US-T 31/01/26", "STK", "SMART", "USD")  # Try as stock first
+
+
     # Test individual stock
     # test_security("BRK.B", "STK", "NYSE", "USD")
     # test_security("BRK-B", "STK", "NYSE", "USD")
     # test_security("BRK", "STK", "NYSE", "USD")
-    test_security("3033", "STK", "SEHK", "HKD")
-    test_security("PTLC", "STK", "SMART", "USD")
-    test_security("2806", "STK", "SEHK", "HKD")
-    test_security("2807", "STK", "SEHK", "HKD")
-    test_security("3439", "STK", "SEHK", "HKD")
-    test_security("ARKQ", "STK", "SEHK", "HKD")
-    test_security("GLD", "STK", "SEHK", "HKD")
+    # test_security("3033", "STK", "SEHK", "HKD")
+    # test_security("PTLC", "STK", "SMART", "USD")
+    # test_security("2806", "STK", "SEHK", "HKD")
+    # test_security("2807", "STK", "SEHK", "HKD")
+    # test_security("3439", "STK", "SEHK", "HKD")
+    # test_security("ARKQ", "STK", "SEHK", "HKD")
+    # test_security("GLD", "STK", "SEHK", "HKD")
 
     print("\n\n")
 
     # Test bond with ISIN
-    # test_security("US91282CJV46", "BOND", "SMART", "USD")
+    test_security("US91282CJV46", "BOND", "SMART", "USD")
 
     print("\n\n")
 
