@@ -6,16 +6,12 @@ Comprehensive test suite for IBKR modules:
 """
 
 import unittest
-from unittest.mock import Mock, MagicMock, patch, call
-from dataclasses import dataclass
-from typing import Dict, List, Optional
+from unittest.mock import MagicMock, patch
 
 from IBKRClientPortalAPI import IBKRClientPortalAPI, SecurityPrice
 from IBKRPriceFetcher import IBKRPriceFetcher
 from stock_updater import (
-    ColumnMapping, UpdateStatistics, ErrorRecord, ErrorTracker, AppContext,
-    is_valid_symbol, is_isin, detect_market_info, find_header_columns,
-    clean_price, update_quantity, update_price
+    ColumnMapping, UpdateStatistics, ErrorTracker, AppContext
 )
 
 
