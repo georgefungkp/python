@@ -37,6 +37,7 @@ class Config:
     header_symbol: str = "編號"
     header_quantity: str = "股數"
     header_price: str = "市價"
+    header_avg_price: str = "買價"
     header_name: str = "股票名稱"
     end_marker: str = "佔投資組合持股市值"
 
@@ -47,6 +48,7 @@ class ColumnMapping:
     symbol: Optional[int] = None
     quantity: Optional[int] = None
     price: Optional[int] = None
+    avg_price: Optional[int] = None
     name: Optional[int] = None
 
     def is_complete(self) -> bool:
@@ -72,6 +74,7 @@ class UpdateStatistics:
     qty_not_in_portfolio: int = 0
     price_updated: int = 0
     price_failed: int = 0
+    avg_price_updated: int = 0
     skipped: int = 0
     qty_changes: List[Tuple[str, float, float]] = field(default_factory=list)
     symbols_in_excel: set = field(default_factory=set)
@@ -252,6 +255,8 @@ class WorksheetAnalyzer:
                     columns.quantity = col
                 elif cell_value == self.config.header_price:
                     columns.price = col
+                elif cell_value == self.config.header_avg_price:
+                    columns.avg_price = col
                 elif cell_value == self.config.header_name:
                     columns.name = col
 
@@ -337,6 +342,7 @@ class PortfolioManager:
 
                 portfolio[normalized_ticker] = {
                     'quantity': pos.get('position', 0),
+                    'avg_price': pos.get('avgPrice'),
                     'conid': str(pos.get('conid', '')),
                     'currency': pos.get('currency', 'USD'),
                     'description': pos.get('contractDesc', ''),
@@ -352,22 +358,31 @@ class QuantityUpdater:
     """Handles quantity updates for securities."""
 
     @staticmethod
-    def update_quantity(ws, row: int, col: int, symbol: str, portfolio: Dict,
-                        stats: UpdateStatistics, errors: ErrorTracker, stock_name: Optional[str]):
-        """Update quantity for a single security."""
+    def update_quantity(ws, row: int, qty_col: int, symbol: str, portfolio: Dict,
+                        stats: UpdateStatistics, errors: ErrorTracker, stock_name: Optional[str],
+                        avg_price_col: Optional[int] = None):
+        """Update quantity and average price for a single security."""
         normalized_symbol = SymbolValidator.normalize_symbol(symbol)
 
         if normalized_symbol in portfolio:
-            old_qty = ws.cell(row, col).value or 0
+            old_qty = ws.cell(row, qty_col).value or 0
             new_qty = portfolio[normalized_symbol]['quantity']
 
-            ws.cell(row, col).value = new_qty
+            ws.cell(row, qty_col).value = new_qty
             print(f"  ✅ Quantity: {new_qty}")
             stats.qty_updated += 1
 
             # Track if quantity changed
             if old_qty != new_qty:
                 stats.qty_changes.append((symbol, old_qty, new_qty))
+            
+            # Update average price if column exists
+            if avg_price_col is not None:
+                avg_price = portfolio[normalized_symbol].get('avg_price')
+                if avg_price is not None:
+                    ws.cell(row, avg_price_col).value = avg_price
+                    print(f"  ✅ Avg Price: {avg_price:.2f}")
+                    stats.avg_price_updated += 1
         else:
             print(f"  ⚠️  Quantity: Not in portfolio")
             print(f"     Reason: Symbol '{symbol}' (normalized: '{normalized_symbol}') not found in your IBKR holdings")
@@ -532,6 +547,12 @@ class ReportGenerator:
         if columns.name:
             print(f"✅ {config.header_name}: Column {columns.name}")
 
+        if columns.avg_price:
+            print(f"✅ {config.header_avg_price}: Column {columns.avg_price}")
+        else:
+            print(f"⚠️  {config.header_avg_price}: Not found - average prices will not be updated")
+
+
     @staticmethod
     def print_summary(stats: UpdateStatistics, portfolio: Dict[str, Dict]):
         """Print concise update summary."""
@@ -551,6 +572,10 @@ class ReportGenerator:
 
         if stats.qty_not_in_portfolio > 0:
             print(f"   Not in portfolio: {stats.qty_not_in_portfolio} (see details below)")
+
+        # Average prices section
+        if stats.avg_price_updated > 0:
+            print(f"\n💵 Average Prices: {stats.avg_price_updated} updated")
 
         # Prices section
         print(f"\n💰 Prices: {stats.price_updated} updated")
@@ -844,7 +869,7 @@ class AssetAllocationUpdater:
                 # Update quantity immediately (fast, no network call)
                 if columns.quantity:
                     QuantityUpdater.update_quantity(ws, row, columns.quantity, symbol, portfolio,
-                                                    stats, errors, stock_name)
+                                                    stats, errors, stock_name, columns.avg_price)
 
                 # Collect for batch price update
                 if columns.price:
